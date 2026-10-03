@@ -1,0 +1,7 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://gym-fitness-api.onrender.com/api"
+  }
+}

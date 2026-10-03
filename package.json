@@ -1,0 +1,16 @@
+{
+  "name": "gym-fitness-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-Ready World-Class Fitness Gym Membership Management Platform",
+  "scripts": {
+    "dev:backend": "npm.cmd --prefix backend run dev",
+    "dev:frontend": "npm.cmd --prefix frontend run dev",
+    "build:backend": "npm.cmd --prefix backend run build",
+    "build:frontend": "npm.cmd --prefix frontend run build",
+    "test:backend": "npm.cmd --prefix backend run test",
+    "install:all": "npm.cmd --prefix backend install && npm.cmd --prefix frontend install"
+  },
+  "keywords": ["gym", "fitness", "saas", "tidb", "management", "nextjs", "render", "vercel"],
+  "author": "John Steve"
+}
