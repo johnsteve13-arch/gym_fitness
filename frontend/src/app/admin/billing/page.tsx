@@ -71,18 +71,18 @@ export default function AdminBillingPage() {
         <Card className="glass-card border-slate-800">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Gross Revenue</span>
           <div className="mt-2 text-2xl sm:text-3xl font-black text-white">
-            ${Number(analytics?.totalRevenue || 24950).toLocaleString()}
+            ₱{Number(analytics?.totalRevenue || 24950).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-emerald-400 flex items-center gap-1 font-semibold">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>Today: ${Number(analytics?.todayRevenue || 859.97).toFixed(2)}</span>
+            <span>Today: ₱{Number(analytics?.todayRevenue || 859.97).toFixed(2)}</span>
           </div>
         </Card>
 
         <Card className="glass-card border-slate-800">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Membership Revenue</span>
           <div className="mt-2 text-2xl sm:text-3xl font-black text-emerald-400">
-            ${Number(analytics?.membershipRevenue || 19800).toLocaleString()}
+            ₱{Number(analytics?.membershipRevenue || 19800).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-slate-400">Primary recurring cashflow</div>
         </Card>
@@ -90,7 +90,7 @@ export default function AdminBillingPage() {
         <Card className="glass-card border-slate-800">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Trainer Sessions</span>
           <div className="mt-2 text-2xl sm:text-3xl font-black text-cyan-400">
-            ${Number(analytics?.trainerRevenue || 3450).toLocaleString()}
+            ₱{Number(analytics?.trainerRevenue || 3450).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-slate-400">1-on-1 private coaching</div>
         </Card>
@@ -98,7 +98,7 @@ export default function AdminBillingPage() {
         <Card className="glass-card border-slate-800">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Classes & Merchandise</span>
           <div className="mt-2 text-2xl sm:text-3xl font-black text-amber-400">
-            ${Number((analytics?.classRevenue || 1200) + (analytics?.otherRevenue || 500)).toLocaleString()}
+            ₱{Number((analytics?.classRevenue || 1200) + (analytics?.otherRevenue || 500)).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-slate-400">Ancillary retail & drop-ins</div>
         </Card>
@@ -136,7 +136,7 @@ export default function AdminBillingPage() {
                       {p.member?.user?.firstName} {p.member?.user?.lastName}
                     </td>
 
-                    <td className="px-4 py-3.5 font-bold text-white">${Number(p.netAmount).toFixed(2)}</td>
+                    <td className="px-4 py-3.5 font-bold text-white">₱{Number(p.netAmount).toFixed(2)}</td>
 
                     <td className="px-4 py-3.5 capitalize text-slate-300">
                       {p.paymentMethod.replace("_", " ")}
@@ -241,7 +241,7 @@ export default function AdminBillingPage() {
                       {selectedReceipt.paymentType}
                     </td>
                     <td className="p-2.5 text-right font-bold text-slate-900">
-                      ${Number(selectedReceipt.amount).toFixed(2)}
+                      ₱{Number(selectedReceipt.amount).toFixed(2)}
                     </td>
                   </tr>
                 </tbody>
@@ -253,15 +253,15 @@ export default function AdminBillingPage() {
               <div className="w-48 space-y-1.5 text-right">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal:</span>
-                  <span>${Number(selectedReceipt.amount).toFixed(2)}</span>
+                  <span>₱{Number(selectedReceipt.amount).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Discount:</span>
-                  <span>-${Number(selectedReceipt.discountAmount || 0).toFixed(2)}</span>
+                  <span>-₱{Number(selectedReceipt.discountAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-base font-black text-slate-900 border-t border-slate-300 pt-1.5">
                   <span>Total Paid:</span>
-                  <span>${Number(selectedReceipt.netAmount).toFixed(2)}</span>
+                  <span>₱{Number(selectedReceipt.netAmount).toFixed(2)}</span>
                 </div>
               </div>
             </div>

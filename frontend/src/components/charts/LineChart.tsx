@@ -11,7 +11,7 @@ export const LineChart: React.FC<LineChartProps> = ({
   data,
   height = 200,
   lineColor = "#10B981",
-  valuePrefix = "$",
+  valuePrefix = "₱",
 }) => {
   if (!data || data.length < 2) {
     return <div className="text-sm text-slate-500 text-center py-8">Insufficient data points</div>;

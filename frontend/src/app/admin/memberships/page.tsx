@@ -195,7 +195,7 @@ export default function AdminMembershipsPage() {
                   <p className="text-xs text-slate-400 mb-4 line-clamp-2">{p.description}</p>
 
                   <div className="flex items-baseline gap-1 my-3">
-                    <span className="text-3xl font-black text-white">${Number(p.price).toFixed(2)}</span>
+                    <span className="text-3xl font-black text-white">₱{Number(p.price).toFixed(2)}</span>
                     <span className="text-xs text-slate-400">/ {p.durationDays} days</span>
                   </div>
 
@@ -335,7 +335,7 @@ export default function AdminMembershipsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Price ($ USD) *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Price (₱ PHP) *</label>
               <input
                 type="number"
                 step="0.01"

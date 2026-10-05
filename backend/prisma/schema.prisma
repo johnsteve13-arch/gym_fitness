@@ -413,7 +413,7 @@ model Payment {
   amount         Decimal       @db.Decimal(10, 2)
   discountAmount Decimal       @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
   netAmount      Decimal       @map("net_amount") @db.Decimal(10, 2)
-  currency       String        @default("USD")
+  currency       String        @default("PHP")
   paymentMethod  String        @default("credit_card") @map("payment_method") // credit_card, cash, bank_transfer, online
   paymentStatus  PaymentStatus @default(completed) @map("payment_status")
   paymentType    PaymentType   @default(membership) @map("payment_type")
@@ -537,7 +537,7 @@ model GymSetting {
   address                      String   @default("742 Evergreen Terrace, Suite 100, Metro City")
   phone                        String   @default("+1 (555) 019-2834")
   email                        String   @default("operations@apexfitness.com")
-  currency                     String   @default("USD")
+  currency                     String   @default("PHP")
   timezone                     String   @default("America/New_York")
   taxRate                      Decimal  @default(8.50) @map("tax_rate") @db.Decimal(5, 2)
   unpaidBookingTimeoutMinutes  Int      @default(30) @map("unpaid_booking_timeout_minutes")

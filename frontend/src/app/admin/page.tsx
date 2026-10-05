@@ -11,7 +11,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import {
   Users,
   QrCode,
-  DollarSign,
+  Banknote,
   TrendingUp,
   AlertTriangle,
   ArrowRight,
@@ -123,17 +123,17 @@ export default function AdminDashboardPage() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Revenue</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+              <Banknote className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-white">
-              ${Number(metrics?.revenue?.total || 48920).toLocaleString()}
+              ₱{Number(metrics?.revenue?.total || 48920).toLocaleString()}
             </span>
             <Badge variant="success" className="text-[10px]">+18.4% MoM</Badge>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            Today: ${Number(metrics?.revenue?.today || 1240).toLocaleString()}
+            Today: ₱{Number(metrics?.revenue?.today || 1240).toLocaleString()}
           </div>
         </Card>
 
@@ -210,7 +210,7 @@ export default function AdminDashboardPage() {
               </div>
               <Badge variant="emerald">Last 6 Months</Badge>
             </div>
-            <LineChart data={revenueTrends} height={220} lineColor="#10B981" valuePrefix="$" />
+            <LineChart data={revenueTrends} height={220} lineColor="#10B981" valuePrefix="₱" />
           </Card>
         </div>
 

@@ -54,7 +54,7 @@ export default function AdminTrainersPage() {
                   </div>
                   <div>
                     <span className="text-slate-400 block">Hourly Rate</span>
-                    <strong className="text-emerald-400">${Number(t.hourlyRate).toFixed(2)}/hr</strong>
+                    <strong className="text-emerald-400">₱{Number(t.hourlyRate).toFixed(2)}/hr</strong>
                   </div>
                   <div className="pt-2 col-span-2 border-t border-slate-800 flex justify-between items-center">
                     <span className="text-slate-400">Max Client Load:</span>

@@ -562,7 +562,7 @@ class ApiClient {
         memberId: body.memberId || "mem-1",
         amount: body.amount,
         netAmount: body.amount - (body.discountAmount || 0),
-        currency: "USD",
+        currency: "PHP",
         paymentMethod: body.paymentMethod || "credit_card",
         paymentStatus: "completed",
         paymentType: body.paymentType || "membership",

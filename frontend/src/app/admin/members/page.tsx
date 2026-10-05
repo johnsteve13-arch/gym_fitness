@@ -341,7 +341,7 @@ export default function AdminMembersPage() {
                 <option value="">No Plan (Gym Pass only)</option>
                 {plans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} (${Number(p.price).toFixed(2)})
+                    {p.name} (₱{Number(p.price).toFixed(2)})
                   </option>
                 ))}
               </select>

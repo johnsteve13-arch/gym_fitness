@@ -84,7 +84,7 @@ export default function MemberPaymentsPage() {
                   <td className="px-5 py-3.5 font-mono text-emerald-400 font-semibold">{p.invoiceNumber}</td>
                   <td className="px-4 py-3.5 text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3.5 uppercase font-mono text-[10px] text-slate-300">{p.paymentType}</td>
-                  <td className="px-4 py-3.5 font-bold text-white">${Number(p.netAmount).toFixed(2)}</td>
+                  <td className="px-4 py-3.5 font-bold text-white">₱{Number(p.netAmount).toFixed(2)}</td>
                   <td className="px-4 py-3.5 capitalize text-slate-300">{p.paymentMethod.replace("_", " ")}</td>
                   <td className="px-4 py-3.5 text-right">
                     <Badge variant="success">Completed</Badge>

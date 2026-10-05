@@ -87,7 +87,7 @@ export default function MemberTrainersPage() {
                 <p className="text-xs text-slate-400 mb-4 line-clamp-3">{t.bio}</p>
 
                 <div className="flex justify-between items-center text-xs text-slate-300 border-t border-slate-800 pt-3">
-                  <span>Rate: <strong className="text-emerald-400">${Number(t.hourlyRate).toFixed(2)}/hr</strong></span>
+                  <span>Rate: <strong className="text-emerald-400">₱{Number(t.hourlyRate).toFixed(2)}/hr</strong></span>
                   <span>{t.experienceYears} Years Exp</span>
                 </div>
               </div>
@@ -151,7 +151,7 @@ export default function MemberTrainersPage() {
 
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex justify-between text-xs">
               <span className="text-slate-400">Total Rate:</span>
-              <span className="text-emerald-400 font-bold">${Number(selectedTrainer.hourlyRate).toFixed(2)} USD</span>
+              <span className="text-emerald-400 font-bold">₱{Number(selectedTrainer.hourlyRate).toFixed(2)} PHP</span>
             </div>
 
             <div className="pt-2 flex justify-end gap-2">

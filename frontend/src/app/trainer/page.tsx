@@ -95,7 +95,7 @@ export default function TrainerDashboardPage() {
 
           <Card className="glass-card border-slate-800">
             <span className="text-xs font-semibold text-slate-400 uppercase">Coaching Commission</span>
-            <div className="mt-2 text-3xl font-black text-amber-400">$75.00 / hr</div>
+            <div className="mt-2 text-3xl font-black text-amber-400">₱75.00 / hr</div>
             <div className="text-xs text-slate-400 mt-1">Direct payout weekly</div>
           </Card>
         </div>

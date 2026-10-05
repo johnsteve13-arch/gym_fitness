@@ -161,7 +161,7 @@ function RegisterForm() {
               >
                 {plans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — ${Number(p.price).toFixed(2)} ({p.durationDays} days)
+                    {p.name} — ₱{Number(p.price).toFixed(2)} ({p.durationDays} days)
                   </option>
                 ))}
               </select>
