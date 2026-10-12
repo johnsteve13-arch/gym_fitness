@@ -4,10 +4,11 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "@/lib/api";
-import { Member } from "@/types";
+import { Member, Trainer } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
 import {
   QrCode,
   Calendar,
@@ -20,11 +21,24 @@ import {
   Flame,
   Scale,
   UserCheck,
+  Users,
+  Target,
 } from "lucide-react";
 
 export default function MemberOverviewPage() {
   const [member, setMember] = useState<Member | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState("");
+
+  // Quick Book Form State
+  const [selectedTrainerId, setSelectedTrainerId] = useState("");
+  const [workoutRoutine, setWorkoutRoutine] = useState("Push & Shoulder Hypertrophy");
+  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startTime, setStartTime] = useState("10:00");
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   useEffect(() => {
     const user = api.getCurrentUser();
@@ -42,12 +56,71 @@ export default function MemberOverviewPage() {
     });
 
     api.listBookings({ memberId }).then((b) => {
-      if (b) setMyBookings(b);
+      if (b) setBookings(b);
+    });
+
+    api.listTrainers().then((trList) => {
+      setTrainers(trList);
+      if (trList.length > 0) {
+        setSelectedTrainerId(trList[0].id);
+      }
     });
   }, []);
 
-  const setMyBookings = (b: any[]) => {
-    setBookings(b);
+  const handleQuickBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const coach = trainers.find((t) => t.id === selectedTrainerId) || trainers[0];
+    if (!coach) {
+      alert("No personal trainer selected.");
+      return;
+    }
+
+    setBookingLoading(true);
+    try {
+      const user = api.getCurrentUser();
+      const storedMembers = api.getStoredMembers();
+      const memberRecord =
+        storedMembers.find(
+          (m) => m.userId === user?.id || m.user?.email.toLowerCase() === user?.email.toLowerCase()
+        ) || storedMembers[0];
+
+      const [hours, minutes] = startTime.split(":");
+      const endHour = ((parseInt(hours, 10) + 1) % 24).toString().padStart(2, "0");
+      const endTime = `${endHour}:${minutes || "00"}`;
+
+      await api.bookTrainer({
+        trainerId: coach.id,
+        trainerUserId: coach.userId || coach.user?.id,
+        trainerEmail: coach.user?.email,
+        trainerName: `${coach.user?.firstName || "Coach"} ${coach.user?.lastName || ""}`,
+        memberId: memberRecord?.id || `mem-${user?.id || Date.now()}`,
+        memberName: `${user?.firstName || "Athlete"} ${user?.lastName || ""}`,
+        memberEmail: user?.email || "athlete@apexfitness.com",
+        memberPhone: user?.phone || memberRecord?.user?.phone || "+63 (917) 000-0000",
+        memberCode: memberRecord?.memberCode || "MEM-ATHLETE",
+        sessionDate,
+        startTime,
+        endTime,
+        sessionType: workoutRoutine || "1-on-1 Workout Coaching",
+        notes: `Target Workout: ${workoutRoutine}. ${bookingNotes || "Lifting form critique and progressive overload assistance."}`,
+        price: coach.hourlyRate,
+      });
+
+      setIsQuickBookOpen(false);
+      setBookingNotes("");
+      setActionSuccess(
+        `Personal trainer booked! Coach ${coach.user?.firstName} reserved for your "${workoutRoutine}" workout on ${sessionDate} at ${startTime}!`
+      );
+
+      const memberId = memberRecord?.id || user?.id || "";
+      const updatedBookings = await api.listBookings({ memberId });
+      setBookings(updatedBookings);
+      setTimeout(() => setActionSuccess(""), 6000);
+    } catch (err: any) {
+      alert(err.message || "Failed to complete reservation.");
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   const activeMembership = member?.memberships?.[0];
@@ -60,9 +133,10 @@ export default function MemberOverviewPage() {
     : "Active Term";
 
   const nextBooking = bookings.find((b) => b.status !== "completed") || bookings[0];
+  const chosenCoach = trainers.find((t) => t.id === selectedTrainerId) || trainers[0];
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Welcome Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800">
         <div>
@@ -79,16 +153,101 @@ export default function MemberOverviewPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/member/trainers">
-            <Button size="sm" variant="outline" leftIcon={<UserCheck className="w-4 h-4 text-emerald-400" />}>
-              Book Personal Trainer
-            </Button>
-          </Link>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsQuickBookOpen(true)}
+            leftIcon={<UserCheck className="w-4 h-4 text-emerald-400" />}
+          >
+            Book Personal Trainer
+          </Button>
           <Link href="/member/workouts">
             <Button size="sm" leftIcon={<Dumbbell className="w-4 h-4" />}>
               Log Workout Session
             </Button>
           </Link>
+        </div>
+      </div>
+
+      {actionSuccess && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs flex items-center gap-2.5 shadow-lg shadow-emerald-950/40">
+          <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+          <span className="font-medium">{actionSuccess}</span>
+        </div>
+      )}
+
+      {/* DEDICATED TRAINER BOOKING NAVIGATION BAR */}
+      <div className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-emerald-500/30 p-3 sm:p-4 shadow-xl shadow-emerald-950/20">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white uppercase tracking-wider">
+                  Trainer Booking Hub
+                </span>
+                <Badge variant="emerald" className="text-[10px] py-0 px-2">
+                  {trainers.length} Certified Coaches
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400">
+                Book private workout coaching, form check & progressive overload
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <Link
+              href="/member/trainers"
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Browse All Coaches</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                setWorkoutRoutine("Push & Shoulder Hypertrophy");
+                setIsQuickBookOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Dumbbell className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Book for Workout</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setWorkoutRoutine("Barbell PR Spotting & Technique Check");
+                setIsQuickBookOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Target className="w-3.5 h-3.5 text-amber-400" />
+              <span>Form Check / Spotter</span>
+            </button>
+
+            <Link
+              href="/member/trainers"
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span>My Schedule ({bookings.length})</span>
+            </Link>
+
+            <Button
+              size="sm"
+              onClick={() => setIsQuickBookOpen(true)}
+              leftIcon={<Calendar className="w-3.5 h-3.5" />}
+              className="text-xs font-bold"
+            >
+              Book Trainer Now
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -259,6 +418,115 @@ export default function MemberOverviewPage() {
           </div>
         </div>
       </div>
+
+      {/* QUICK BOOK TRAINER MODAL */}
+      <Modal
+        isOpen={isQuickBookOpen}
+        onClose={() => setIsQuickBookOpen(false)}
+        title="Book Personal Trainer for Your Workout"
+        maxWidth="lg"
+      >
+        <form onSubmit={handleQuickBook} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              Select Your Preferred Personal Trainer
+            </label>
+            {trainers.length === 0 ? (
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-400">
+                No certified coaches currently registered. Coaches can register at /register.
+              </div>
+            ) : (
+              <select
+                value={selectedTrainerId}
+                onChange={(e) => setSelectedTrainerId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                required
+              >
+                {trainers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    Coach {t.user?.firstName} {t.user?.lastName} — {t.specialization} (₱{Number(t.hourlyRate).toFixed(2)}/hr)
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              Target Workout / Muscle Group
+            </label>
+            <input
+              type="text"
+              value={workoutRoutine}
+              onChange={(e) => setWorkoutRoutine(e.target.value)}
+              placeholder="e.g. Heavy Barbell Bench & Incline Press, Squat Day & Form Correction"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
+              <input
+                type="date"
+                value={sessionDate}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setSessionDate(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Start Time</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              What do you want the coach to help you with during this workout?
+            </label>
+            <textarea
+              rows={2}
+              value={bookingNotes}
+              onChange={(e) => setBookingNotes(e.target.value)}
+              placeholder="e.g. Spotting heavy singles on bench, checking lower back alignment on squats, progressive overload pacing."
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+            />
+          </div>
+
+          {chosenCoach && (
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
+              <div>
+                <span className="text-slate-400 block">
+                  Coach: <strong className="text-white">Coach {chosenCoach.user?.firstName} {chosenCoach.user?.lastName}</strong>
+                </span>
+                <span className="text-[11px] text-emerald-400">{chosenCoach.specialization}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-emerald-400 font-bold text-sm block">₱{Number(chosenCoach.hourlyRate).toFixed(2)} PHP</span>
+                <span className="text-[10px] text-slate-500">60-minute private session</span>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setIsQuickBookOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={bookingLoading} disabled={trainers.length === 0}>
+              Confirm Coach Reservation
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
