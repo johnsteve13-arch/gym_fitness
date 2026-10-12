@@ -27,7 +27,13 @@ export default function LoginPage() {
 
     try {
       const res = await api.login(email, password);
-      redirectRole(res.user.role);
+      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const redirectUrl = params?.get("redirect");
+      if (redirectUrl) {
+        router.push(redirectUrl);
+      } else {
+        redirectRole(res.user.role);
+      }
     } catch (err: any) {
       setError(err.message || "Invalid email or password.");
     } finally {

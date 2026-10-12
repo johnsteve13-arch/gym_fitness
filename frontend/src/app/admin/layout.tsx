@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -26,6 +26,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    const user = api.getCurrentUser();
+    if (!user || (user.role !== "admin" && user.role !== "super_admin")) {
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+    } else {
+      setAuthorized(true);
+    }
+  }, [pathname, router]);
 
   const navItems = [
     { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -43,6 +53,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     api.logout();
     router.push("/login");
   };
+
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-[#090D14] flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400">Verifying Admin Access...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#090D14] flex">

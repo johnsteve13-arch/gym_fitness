@@ -17,18 +17,20 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/a
 
 class ApiClient {
   private token: string | null = null;
-  private currentUser: User = MOCK_USERS.admin; // Default to admin for fast demo exploration
+  private currentUser: User | null = null;
 
   constructor() {
     if (typeof window !== "undefined") {
       this.token = localStorage.getItem("apex_gym_token");
       const savedUser = localStorage.getItem("apex_gym_user");
-      if (savedUser) {
+      if (savedUser && this.token) {
         try {
           this.currentUser = JSON.parse(savedUser);
         } catch {
-          // ignore
+          this.currentUser = null;
         }
+      } else {
+        this.currentUser = null;
       }
     }
   }
@@ -44,30 +46,31 @@ class ApiClient {
 
   logout() {
     this.token = null;
-    this.currentUser = MOCK_USERS.admin;
+    this.currentUser = null;
     if (typeof window !== "undefined") {
       localStorage.removeItem("apex_gym_token");
       localStorage.removeItem("apex_gym_user");
     }
   }
 
-  getCurrentUser(): User {
+  getCurrentUser(): User | null {
+    if (typeof window !== "undefined" && !this.currentUser) {
+      const savedUser = localStorage.getItem("apex_gym_user");
+      const savedToken = localStorage.getItem("apex_gym_token");
+      if (savedUser && savedToken) {
+        try {
+          this.currentUser = JSON.parse(savedUser);
+          this.token = savedToken;
+        } catch {
+          this.currentUser = null;
+        }
+      }
+    }
     return this.currentUser;
   }
 
-  // Role switcher support
-  switchDemoRole(role: "super_admin" | "admin" | "trainer" | "member"): User {
-    let target = MOCK_USERS.admin;
-    if (role === "trainer") {
-      const storedTrainers = this.getStoredTrainers();
-      if (storedTrainers[0]?.user) target = storedTrainers[0].user;
-    } else if (role === "member") {
-      const storedMembers = this.getStoredMembers();
-      if (storedMembers[0]?.user) target = storedMembers[0].user;
-    }
-
-    this.setSession(`mock-jwt-token-${role}`, target);
-    return target;
+  isAuthenticated(): boolean {
+    return !!this.getCurrentUser();
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -294,7 +297,7 @@ class ApiClient {
     return result;
   }
 
-  async getMe(): Promise<User> {
+  async getMe(): Promise<User | null> {
     try {
       const user = await this.request<User>("/auth/me");
       this.currentUser = user;

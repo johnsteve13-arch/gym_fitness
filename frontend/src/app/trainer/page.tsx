@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +26,8 @@ import {
 } from "lucide-react";
 
 export default function TrainerDashboardPage() {
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [trainerProfile, setTrainerProfile] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -32,9 +35,8 @@ export default function TrainerDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed">("all");
 
-  const loadData = async () => {
+  const loadData = async (user: any) => {
     setLoading(true);
-    const user = api.getCurrentUser();
     setCurrentUser(user);
     const storedTrainers = api.getStoredTrainers();
     const found = storedTrainers.find(
@@ -59,8 +61,25 @@ export default function TrainerDashboardPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const user = api.getCurrentUser();
+    if (!user || user.role !== "trainer") {
+      router.replace("/login?redirect=/trainer");
+    } else {
+      setAuthorized(true);
+      loadData(user);
+    }
+  }, [router]);
+
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-[#090D14] flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400">Verifying Coach Access...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleComplete = async (bookingId: string, clientName: string) => {
     try {

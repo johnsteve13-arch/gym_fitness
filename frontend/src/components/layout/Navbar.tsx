@@ -9,11 +9,8 @@ import {
   Bell,
   LogOut,
   User as UserIcon,
-  Shield,
-  Dumbbell,
   Menu,
   X,
-  QrCode,
   Flame,
 } from "lucide-react";
 
@@ -29,14 +26,17 @@ export const Navbar: React.FC = () => {
     const currentUser = api.getCurrentUser();
     setUser(currentUser);
 
-    api.listNotifications().then((res) => {
-      setNotifications(res.notifications.slice(0, 5));
-      setUnreadCount(res.unreadCount);
-    });
+    if (currentUser) {
+      api.listNotifications().then((res) => {
+        setNotifications(res.notifications.slice(0, 5));
+        setUnreadCount(res.unreadCount);
+      });
+    }
   }, []);
 
   const handleLogout = () => {
     api.logout();
+    setUser(null);
     router.push("/login");
   };
 
@@ -75,10 +75,6 @@ export const Navbar: React.FC = () => {
           </Link>
           <Link href="/#classes" className="text-slate-300 hover:text-white transition">
             Classes
-          </Link>
-          <Link href="/kiosk" className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold">
-            <QrCode className="w-4 h-4" />
-            Desk Kiosk
           </Link>
         </nav>
 
@@ -135,47 +131,28 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
 
-              {/* Portal link button based on role */}
-              {user.role === "super_admin" || user.role === "admin" ? (
-                <Link
-                  href="/admin"
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
-                >
-                  <Shield className="w-3.5 h-3.5" />
-                  Admin Portal
-                </Link>
-              ) : user.role === "trainer" ? (
-                <Link
-                  href="/trainer"
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
-                >
-                  <Dumbbell className="w-3.5 h-3.5" />
-                  Trainer Portal
-                </Link>
-              ) : (
-                <Link
-                  href="/member"
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
-                >
-                  <UserIcon className="w-3.5 h-3.5" />
-                  Member Portal
-                </Link>
-              )}
+              {/* Signed-in user badge */}
+              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-white font-semibold">{user.firstName}</span>
+                <span className="text-[10px] text-slate-400 uppercase font-mono">({user.role})</span>
+              </div>
 
-              {/* Logout button */}
+              {/* Sign out button */}
               <button
                 onClick={handleLogout}
-                className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
-                title="Logout"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-red-400 hover:bg-slate-900 transition"
+                title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign Out</span>
               </button>
             </>
           ) : (
             <div className="flex items-center gap-2">
               <Link
                 href="/login"
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition hover:bg-slate-900"
               >
                 Sign In
               </Link>
@@ -229,13 +206,38 @@ export const Navbar: React.FC = () => {
           >
             Classes
           </Link>
-          <Link
-            href="/kiosk"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-sm text-emerald-400 font-semibold hover:bg-slate-800"
-          >
-            Reception Kiosk Terminal
-          </Link>
+
+          {!user ? (
+            <div className="pt-2 border-t border-slate-800 flex gap-2">
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 text-center py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-900 border border-slate-800"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 text-center py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950"
+              >
+                Join Now
+              </Link>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+                className="w-full text-left py-2 px-3 rounded-lg text-xs font-semibold text-red-400 hover:bg-slate-900 flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out ({user.firstName})</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>
