@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:clean": "tsx prisma/clean-dummies.ts",
     "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
   "keywords": ["gym", "fitness", "saas", "tidb", "management"],
