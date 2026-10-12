@@ -15,6 +15,7 @@ import {
   FileText,
   Flame,
   ArrowRight,
+  LogOut,
 } from "lucide-react";
 
 export default function TrainerDashboardPage() {
@@ -75,6 +76,11 @@ export default function TrainerDashboardPage() {
             <Link href="/register?role=member">
               <Button size="sm" variant="outline">
                 Member Registration
+              </Button>
+            </Link>
+            <Link href="/trainer/logout">
+              <Button size="sm" variant="danger" leftIcon={<LogOut className="w-4 h-4" />}>
+                Log Out
               </Button>
             </Link>
           </div>
