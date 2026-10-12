@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Flame, Lock, Mail, ShieldAlert, ArrowRight, Sparkles } from "lucide-react";
+import { Flame, Lock, Mail, ShieldAlert } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,11 +33,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickDemoLogin = (role: "super_admin" | "admin" | "trainer" | "member") => {
-    const user = api.switchDemoRole(role);
-    redirectRole(user.role);
   };
 
   const redirectRole = (role: string) => {
@@ -67,40 +62,6 @@ export default function LoginPage() {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
-        {/* Quick Demo Access Bar */}
-        <div className="mb-6 p-3.5 bg-slate-900/90 border border-emerald-500/30 rounded-xl">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Instant One-Click Demo Logins</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              onClick={() => handleQuickDemoLogin("super_admin")}
-              className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-left font-medium transition"
-            >
-              👑 Super Admin
-            </button>
-            <button
-              onClick={() => handleQuickDemoLogin("admin")}
-              className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-left font-medium transition"
-            >
-              🏢 Desk Staff
-            </button>
-            <button
-              onClick={() => handleQuickDemoLogin("trainer")}
-              className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-left font-medium transition"
-            >
-              🏋️ Personal Trainer
-            </button>
-            <button
-              onClick={() => handleQuickDemoLogin("member")}
-              className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-left font-medium transition"
-            >
-              ⚡ Member (Sarah)
-            </button>
-          </div>
-        </div>
-
         <Card className="glass-card border-slate-800 p-6 sm:p-8">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-950/70 border border-red-800/80 text-red-300 text-xs flex items-center gap-2">
@@ -118,7 +79,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@apexfitness.com"
+                  placeholder="admin@apexfitness.com"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
                   required
                 />
@@ -126,12 +87,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-medium text-slate-300">Password</label>
-                <span className="text-[11px] text-emerald-400 hover:underline cursor-pointer">
-                  Default: Password@123
-                </span>
-              </div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Password</label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
@@ -150,11 +106,19 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-slate-400">
-            Don&apos;t have a membership profile yet?{" "}
-            <Link href="/register" className="text-emerald-400 font-semibold hover:underline">
-              Join the Club
-            </Link>
+          <div className="mt-6 pt-6 border-t border-slate-800/80 text-center text-xs text-slate-400 space-y-2">
+            <div>
+              Don&apos;t have an account yet?
+            </div>
+            <div className="flex justify-center gap-4">
+              <Link href="/register?role=member" className="text-emerald-400 font-semibold hover:underline">
+                Join as Member
+              </Link>
+              <span className="text-slate-600">•</span>
+              <Link href="/register?role=trainer" className="text-cyan-400 font-semibold hover:underline">
+                Register as Trainer
+              </Link>
+            </div>
           </div>
         </Card>
       </div>

@@ -13,6 +13,11 @@ export class AuthService {
     phone?: string;
     role?: "member" | "trainer" | "admin";
     fitnessGoals?: string;
+    planId?: string;
+    specialization?: string;
+    bio?: string;
+    experienceYears?: number;
+    hourlyRate?: number;
   }) {
     const existing = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase().trim() },
@@ -55,6 +60,30 @@ export class AuthService {
         },
       });
 
+      // If a plan was selected during registration, activate the membership
+      if (data.planId) {
+        const plan = await prisma.membershipPlan.findUnique({
+          where: { id: data.planId },
+        });
+
+        if (plan) {
+          const startDate = new Date();
+          const endDate = new Date();
+          endDate.setDate(startDate.getDate() + plan.durationDays);
+
+          await prisma.membership.create({
+            data: {
+              memberId: member.id,
+              planId: plan.id,
+              startDate,
+              endDate,
+              status: "active",
+              autoRenew: true,
+            },
+          });
+        }
+      }
+
       // Record welcome reward transaction
       await prisma.rewardTransaction.create({
         data: {
@@ -78,10 +107,10 @@ export class AuthService {
       trainer = await prisma.trainer.create({
         data: {
           userId: user.id,
-          specialization: "Strength & Conditioning",
-          bio: "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
-          experienceYears: 3,
-          hourlyRate: 50.0,
+          specialization: data.specialization || "Strength & Conditioning",
+          bio: data.bio || "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
+          experienceYears: Number(data.experienceYears) || 3,
+          hourlyRate: Number(data.hourlyRate) || 750.0,
         },
       });
     }

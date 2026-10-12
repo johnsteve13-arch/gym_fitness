@@ -15,6 +15,16 @@ import {
 export const MOCK_USERS: Record<string, User> = {
   admin: {
     id: "user-admin",
+    email: "admin@apexfitness.com",
+    role: "super_admin",
+    firstName: "Apex",
+    lastName: "Admin",
+    phone: "+1 (555) 901-0000",
+    status: "active",
+    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+  },
+  superadmin: {
+    id: "user-superadmin",
     email: "superadmin@apexfitness.com",
     role: "super_admin",
     firstName: "Alexander",

@@ -20,7 +20,6 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${inter.className} min-h-screen bg-[#090D14] text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950`}>
         {children}
-        <RoleSwitcher />
       </body>
     </html>
   );

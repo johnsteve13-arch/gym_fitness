@@ -129,18 +129,19 @@ class ApiClient {
       this.setSession(data.token, data.user);
       return data;
     } catch {
+      const role = body.role === "trainer" ? "trainer" : "member";
       const newUser: User = {
         id: `user-${Date.now()}`,
         email: body.email,
-        role: "member",
+        role: role as any,
         firstName: body.firstName,
         lastName: body.lastName,
         phone: body.phone,
         status: "active",
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}`,
       };
-      this.setSession("mock-token-member", newUser);
-      return { token: "mock-token-member", user: newUser };
+      this.setSession(`mock-token-${role}`, newUser);
+      return { token: `mock-token-${role}`, user: newUser };
     }
   }
 

@@ -27,7 +27,22 @@ async function main() {
     },
   });
 
-  // 2. Users: Super Admin & Staff
+  // 2. Users: Admin, Super Admin & Staff
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@apexfitness.com" },
+    update: {},
+    create: {
+      email: "admin@apexfitness.com",
+      passwordHash,
+      role: "super_admin",
+      firstName: "Apex",
+      lastName: "Admin",
+      phone: "+1 (555) 901-0000",
+      status: "active",
+      avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+    },
+  });
+
   const superAdmin = await prisma.user.upsert({
     where: { email: "superadmin@apexfitness.com" },
     update: {},
