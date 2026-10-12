@@ -74,8 +74,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Flame className="w-5 h-5 fill-slate-950" />
           </div>
           <div>
-            <div className="text-sm font-black text-white tracking-wider">APEX ADMIN</div>
-            <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">HQ Operations</div>
+            <div className="text-sm font-black text-white tracking-wider">BOOT CAMP FITNESS</div>
+            <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">GYM MEMBERSHIP MANAGEMENT SYSTEM</div>
           </div>
         </div>
 
@@ -130,7 +130,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="w-7 h-7 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black">
             <Flame className="w-4 h-4 fill-slate-950" />
           </div>
-          <span className="text-sm font-bold text-white">APEX ADMIN</span>
+          <div>
+            <span className="text-xs font-bold text-white block leading-tight">BOOT CAMP FITNESS</span>
+            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">GYM MEMBERSHIP MANAGEMENT SYSTEM</span>
+          </div>
         </Link>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}

@@ -61,9 +61,12 @@ export default function LoginPage() {
           <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/20">
             <Flame className="w-6 h-6 fill-slate-950" />
           </div>
-          <span className="text-xl font-black text-white tracking-wider">APEX IRON</span>
+          <div>
+            <span className="text-xl font-black text-white tracking-wider block">BOOT CAMP FITNESS</span>
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Gym Membership Management System</span>
+          </div>
         </Link>
-        <h2 className="text-2xl font-black text-white tracking-tight">Portal Authentication</h2>
+        <h2 className="text-2xl font-black text-white tracking-tight">Account Sign In</h2>
         <p className="mt-1 text-xs text-slate-400">Secure credential access to club management and services</p>
       </div>
 

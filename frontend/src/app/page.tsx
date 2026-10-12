@@ -80,9 +80,9 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.1] max-w-5xl mx-auto">
-            BOOT CAMP FITNESS GYM <br />
+            BOOT CAMP FITNESS <br />
             <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-cyan-400 bg-clip-text text-transparent">
-              MEMBERSHIP MANAGEMENT SYSTEM
+              GYM MEMBERSHIP MANAGEMENT SYSTEM
             </span>
           </h1>
 
@@ -136,7 +136,7 @@ export default function LandingPage() {
       <section id="benefits" className="py-20 border-t border-slate-800/80 bg-slate-950/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Why Apex Iron</h2>
+            <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Why Boot Camp Fitness</h2>
             <p className="mt-2 text-3xl sm:text-4xl font-black text-white tracking-tight">
               EVERYTHING YOU NEED TO EXCEL. NO SHORTCUTS.
             </p>

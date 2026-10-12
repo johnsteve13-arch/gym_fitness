@@ -125,6 +125,10 @@ export default function TrainerDashboardPage() {
               <Flame className="w-6 h-6 fill-slate-950" />
             </Link>
             <div>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-xs font-black tracking-wider text-white">BOOT CAMP FITNESS</span>
+                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">• GYM MEMBERSHIP MANAGEMENT SYSTEM</span>
+              </div>
               <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
                 <span>{displayName}</span>
                 <Badge variant="emerald">Personal Trainer</Badge>

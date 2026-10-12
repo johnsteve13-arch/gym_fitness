@@ -12,10 +12,10 @@ export const Footer: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-black">
               <Flame className="w-5 h-5 fill-slate-950" />
             </div>
-            <span className="text-base font-bold text-white tracking-wider">APEX IRON CLUB</span>
+            <span className="text-base font-bold text-white tracking-wider">BOOT CAMP FITNESS</span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            World-class athletic conditioning, Olympic lifting suites, recovery cryogenic pools, and AI-driven coaching.
+            Boot Camp Fitness Gym Membership Management System — Athletic conditioning, biometric tracking, personal coaching, and access control.
           </p>
           <div className="flex items-center gap-2 text-xs text-emerald-400">
             <Shield className="w-4 h-4" />
@@ -71,7 +71,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-        © {new Date().getFullYear()} Apex Iron Fitness Platform. All rights reserved. Production Architecture.
+        © {new Date().getFullYear()} Boot Camp Fitness Gym Membership Management System. All rights reserved.
       </div>
     </footer>
   );

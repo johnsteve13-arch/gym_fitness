@@ -76,10 +76,10 @@ export default function TrainerLogoutPage() {
           </div>
           <div>
             <span className="font-black text-white text-base tracking-tight block leading-tight">
-              APEX IRON
+              BOOT CAMP FITNESS
             </span>
             <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">
-              Trainer Terminal
+              Gym Membership Management System
             </span>
           </div>
         </Link>
@@ -216,7 +216,7 @@ export default function TrainerLogoutPage() {
 
       {/* Footer Info */}
       <div className="max-w-4xl w-full mx-auto text-center pt-6 border-t border-slate-800/80 text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <span>Apex Iron Athletic Club — Staff Security & Access Protocol</span>
+        <span>Boot Camp Fitness Gym — Staff Security & Access Protocol</span>
         <span>Secure Local Session Guard</span>
       </div>
     </div>

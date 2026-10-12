@@ -73,9 +73,11 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
               <Flame className="w-5 h-5 fill-slate-950" />
             </div>
             <div>
-              <span className="text-base font-black text-white tracking-wider">APEX ATHLETE</span>
-              <span className="hidden sm:inline-block text-[10px] uppercase font-bold text-emerald-400 ml-2">
-                Member Portal
+              <span className="text-sm sm:text-base font-black text-white tracking-wider block leading-tight">
+                BOOT CAMP FITNESS
+              </span>
+              <span className="text-[9px] sm:text-[10px] uppercase font-bold text-emerald-400 block tracking-wider -mt-0.5">
+                GYM MEMBERSHIP MANAGEMENT SYSTEM
               </span>
             </div>
           </Link>
