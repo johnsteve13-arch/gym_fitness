@@ -18,6 +18,8 @@ import {
   Moon,
 } from "lucide-react";
 
+import { generateSpecificAdvice } from "@/lib/ai-advice";
+
 interface ChatMessage {
   sender: "user" | "ai";
   text: string;
@@ -35,22 +37,29 @@ export default function MemberAiCoachPage() {
     setMessages([
       {
         sender: "ai",
-        text: `Welcome, ${name}! I am your contextual Apex AI Fitness Coach. I can analyze your fitness goals, workouts, and attendance to optimize your training splits, recovery protocols, and athletic habits. What would you like to explore today?`,
+        text: `Welcome, ${name}! I am your Boot Camp Fitness AI Fitness Coach. I provide specific, periodized workout splits (Upper/Lower, PPL, 5-Day), precise macronutrient targets (grams per kg), exercise biomechanics cues, and recovery protocols. You can also redeem your Loyalty Coins to book a certified personal trainer for hands-on form checks. What would you like to explore today?`,
         timestamp: "Just now",
       },
     ]);
   }, []);
 
   const promptSuggestions = [
-    { label: "4-Day Athletic Split", icon: Dumbbell, query: "Recommend a 4-day upper/lower athletic hypertrophy split." },
-    { label: "Macronutrient Guide", icon: Apple, query: "What are my daily protein and hydration targets for muscle growth?" },
-    { label: "Recovery Protocol", icon: Moon, query: "How can I accelerate recovery between heavy lifting sessions?" },
-    { label: "Progressive Overload", icon: Zap, query: "How should I progress my working weights over the next 4 weeks?" },
+    { label: "4-Day Upper/Lower Split", icon: Dumbbell, query: "Recommend a 4-day upper/lower athletic hypertrophy split." },
+    { label: "Push / Pull / Legs (PPL)", icon: Zap, query: "Give me a complete Push Pull Legs (PPL) workout split with sets and reps." },
+    { label: "Chest & Bench Press", icon: Flame, query: "How do I optimize chest hypertrophy and bench press bar path?" },
+    { label: "Squat Form & Legs", icon: Dumbbell, query: "How do I fix squat knee cave and optimize lower body hypertrophy?" },
+    { label: "Protein & Macros Guide", icon: Apple, query: "What are my daily protein, calorie, and hydration targets for muscle growth?" },
+    { label: "Pre & Post Workout Meals", icon: Apple, query: "What should I eat 60 minutes before and immediately after my workout?" },
+    { label: "Recovery & DOMS Protocol", icon: Moon, query: "How can I accelerate recovery and relieve muscle soreness between heavy lifting sessions?" },
+    { label: "Break Strength Plateaus", icon: Zap, query: "How do I break a plateau using progressive overload and double progression?" },
   ];
 
   const handleSend = async (queryToSend?: string) => {
     const text = queryToSend || inputQuery;
     if (!text.trim() || loading) return;
+
+    const user = api.getCurrentUser();
+    const name = user?.firstName || "Athlete";
 
     const userMsg: ChatMessage = {
       sender: "user",
@@ -71,9 +80,10 @@ export default function MemberAiCoachPage() {
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
+      const specificText = generateSpecificAdvice(text, name);
       const fallbackMsg: ChatMessage = {
         sender: "ai",
-        text: "Based on your logged training history, aim for progressive overload with 3-4 working sets per exercise in the 8-12 repetition range. Prioritize 1.8g protein per kg of bodyweight and 8 hours of sleep.",
+        text: specificText,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, fallbackMsg]);
@@ -90,8 +100,8 @@ export default function MemberAiCoachPage() {
           <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
             <Sparkles className="w-5 h-5" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">AI Athletic Conditioning Coach</h1>
-          <Badge variant="emerald">Personalized to Your Data</Badge>
+          <h1 className="text-2xl font-black text-white tracking-tight">Boot Camp Fitness AI Coach</h1>
+          <Badge variant="emerald">Specific & Contextual Guidance</Badge>
         </div>
 
         {/* Clear Medical Disclaimer */}

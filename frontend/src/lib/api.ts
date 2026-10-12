@@ -12,6 +12,7 @@ import {
   MOCK_NOTIFICATIONS,
 } from "./mockData";
 import { User, Member, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification } from "../types";
+import { generateSpecificAdvice } from "./ai-advice";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -1102,16 +1103,18 @@ class ApiClient {
         body: JSON.stringify({ query, focusArea }),
       });
     } catch {
+      const user = this.getCurrentUser();
+      const memberName = user?.firstName || "Athlete";
+      const coins = this.getMemberCoins();
       const goals = "Hypertrophy and Core Strength";
+      const advice = generateSpecificAdvice(query, memberName, goals, 24.23, focusArea, coins);
+
       return {
         fitnessGoals: goals,
         currentBmi: 24.23,
         disclaimer:
           "⚠️ Disclaimer: This AI Fitness Coach provides athletic and educational recommendations based on logged activity. It is not medical advice or diagnostic service.",
-        message: `Based on your goal (${goals}):
-• Progressive Overload: Increase working weight on compound movements by 2-5% every 2 weeks.
-• Recovery: Ensure 8 hours of sleep and prioritize post-workout hydration with electrolytes.
-• Nutrition: Target 1.8g protein per kg of body weight distributed across 3-4 meals.`,
+        message: advice,
       };
     }
   }
