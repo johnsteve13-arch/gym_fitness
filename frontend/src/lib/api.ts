@@ -744,11 +744,89 @@ class ApiClient {
     }
   }
 
+  calculateTrainerCoins(hourlyRate: number | string): number {
+    const rate = Number(hourlyRate) || 75;
+    if (rate > 200) {
+      return Math.round(rate / 5);
+    }
+    return Math.max(50, Math.round(rate));
+  }
+
+  getMemberCoins(memberId?: string): number {
+    if (typeof window === "undefined") return 450;
+    try {
+      const customVal = localStorage.getItem("apex_member_coins");
+      if (customVal !== null && !isNaN(parseInt(customVal, 10))) {
+        return parseInt(customVal, 10);
+      }
+      const stored = this.getStoredMembers();
+      const currentUser = this.getCurrentUser();
+      const m = stored.find(
+        (item) =>
+          (memberId && item.id === memberId) ||
+          item.userId === currentUser?.id ||
+          item.user?.email?.toLowerCase() === currentUser?.email?.toLowerCase()
+      ) || stored[0];
+      if (m && m.rewardCoins !== undefined) {
+        return m.rewardCoins;
+      }
+      return 450;
+    } catch {
+      return 450;
+    }
+  }
+
+  setMemberCoins(amount: number, memberId?: string): void {
+    if (typeof window === "undefined") return;
+    try {
+      const sanitized = Math.max(0, amount);
+      localStorage.setItem("apex_member_coins", sanitized.toString());
+      const stored = this.getStoredMembers();
+      const currentUser = this.getCurrentUser();
+      const mIdx = stored.findIndex(
+        (item) =>
+          (memberId && item.id === memberId) ||
+          item.userId === currentUser?.id ||
+          item.user?.email?.toLowerCase() === currentUser?.email?.toLowerCase()
+      );
+      if (mIdx !== -1) {
+        stored[mIdx].rewardCoins = sanitized;
+        localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+      }
+      if (MOCK_MEMBERS.length > 0) {
+        MOCK_MEMBERS[0].rewardCoins = sanitized;
+      }
+    } catch (e) {
+      console.warn("Failed to update coins", e);
+    }
+  }
+
   async bookTrainer(body: any): Promise<any> {
+    const isCoins = body.paymentMethod === "coins";
+    const coinsRequired =
+      body.coinsPaid !== undefined
+        ? Number(body.coinsPaid)
+        : this.calculateTrainerCoins(body.price || 75);
+
+    if (isCoins) {
+      const currentCoins = this.getMemberCoins(body.memberId);
+      if (currentCoins < coinsRequired) {
+        throw new Error(
+          `Insufficient coin balance. You have ${currentCoins} coins, but this session requires ${coinsRequired} coins. Please choose cash/card or earn more coins.`
+        );
+      }
+      const newBalance = currentCoins - coinsRequired;
+      this.setMemberCoins(newBalance, body.memberId);
+    }
+
     try {
       const res = await this.request<any>("/bookings", {
         method: "POST",
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          paymentMethod: isCoins ? "coins" : (body.paymentMethod || "cash"),
+          coinsPaid: isCoins ? coinsRequired : undefined,
+        }),
       });
       this.saveStoredBooking(res);
       return res;
@@ -767,8 +845,10 @@ class ApiClient {
         sessionType: body.sessionType || "1-on-1 Fitness Coaching",
         status: "confirmed",
         paymentStatus: "paid",
+        paymentMethod: isCoins ? "coins" : (body.paymentMethod || "cash"),
+        coinsPaid: isCoins ? coinsRequired : undefined,
         price: body.price || 75.0,
-        notes: body.notes || "",
+        notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins` : ""),
         createdAt: new Date().toISOString(),
         member: {
           id: body.memberId,
@@ -793,7 +873,28 @@ class ApiClient {
         },
       };
       this.saveStoredBooking(newBooking);
-      return { success: true, booking: newBooking, message: "Trainer session booked. Confirmed in schedule." };
+
+      if (isCoins) {
+        MOCK_NOTIFICATIONS.unshift({
+          id: `notif-${Date.now()}`,
+          userId: body.memberId || "user-member",
+          title: "Coins Redeemed for Trainer Session",
+          message: `Redeemed ${coinsRequired} Loyalty Coins for 1-on-1 session with ${body.trainerName || "Coach"}. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`,
+          type: "reward",
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return {
+        success: true,
+        booking: newBooking,
+        coinsPaid: isCoins ? coinsRequired : 0,
+        remainingCoins: this.getMemberCoins(body.memberId),
+        message: isCoins
+          ? `Trainer session confirmed! Successfully redeemed ${coinsRequired} coins. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`
+          : "Trainer session booked. Confirmed in schedule.",
+      };
     }
   }
 
@@ -960,18 +1061,14 @@ class ApiClient {
       return await this.request(`/rewards/${rewardId}/redeem`, { method: "POST" });
     } catch {
       const r = MOCK_REWARDS.find((item) => item.id === rewardId);
-      const stored = this.getStoredMembers();
-      const allMembers = [...stored, ...MOCK_MEMBERS];
-      const member = allMembers[0];
       if (r) {
-        if (member && (member.rewardCoins || 0) >= r.pointsCost) {
-          member.rewardCoins = (member.rewardCoins || 0) - r.pointsCost;
-          if (stored.length > 0) {
-            localStorage.setItem("apex_registered_members", JSON.stringify(stored));
-          }
+        const currentCoins = this.getMemberCoins();
+        if (currentCoins >= r.pointsCost) {
+          const newBalance = currentCoins - r.pointsCost;
+          this.setMemberCoins(newBalance);
           return { success: true, reward: r, message: `Redeemed ${r.title}!` };
         } else {
-          throw new Error("Insufficient coins.");
+          throw new Error(`Insufficient coins. You have ${currentCoins} coins, but this reward requires ${r.pointsCost} coins.`);
         }
       }
       return { success: true };

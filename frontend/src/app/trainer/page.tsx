@@ -23,6 +23,7 @@ import {
   Sparkles,
   RefreshCw,
   UserCheck,
+  Award,
 } from "lucide-react";
 
 export default function TrainerDashboardPage() {
@@ -164,7 +165,7 @@ export default function TrainerDashboardPage() {
         )}
 
         {/* Quick Trainer Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="glass-card border-slate-800">
             <span className="text-xs font-semibold text-slate-400 uppercase">Booked Appointments</span>
             <div className="mt-2 text-3xl font-black text-white">{sessions.length} Sessions</div>
@@ -185,8 +186,21 @@ export default function TrainerDashboardPage() {
 
           <Card className="glass-card border-slate-800">
             <span className="text-xs font-semibold text-slate-400 uppercase">Coaching Rate</span>
-            <div className="mt-2 text-3xl font-black text-amber-400">{hourlyRate} / hr</div>
-            <div className="text-xs text-slate-400 mt-1">Direct payout per private session</div>
+            <div className="mt-2 text-3xl font-black text-emerald-400">{hourlyRate} / hr</div>
+            <div className="text-xs text-slate-400 mt-1">Direct session billing</div>
+          </Card>
+
+          <Card className="glass-card border-slate-800">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase">
+              <span>Coins Redeemed</span>
+              <Award className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="mt-2 text-3xl font-black text-amber-400">
+              {sessions.filter((s) => s.paymentMethod === "coins" || s.coinsPaid).length} Sessions
+            </div>
+            <div className="text-xs text-amber-400/80 mt-1">
+              Paid via member loyalty coins
+            </div>
           </Card>
         </div>
 
@@ -295,6 +309,16 @@ export default function TrainerDashboardPage() {
                           <Badge variant="emerald" className="text-[10px]">
                             {sessionFocus}
                           </Badge>
+                          {s.paymentMethod === "coins" || s.coinsPaid ? (
+                            <Badge variant="warning" className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/40 flex items-center gap-1 font-bold">
+                              <Award className="w-3 h-3" />
+                              <span>Redeemed via Coins ({s.coinsPaid || api.calculateTrainerCoins(s.price || 75)} Coins)</span>
+                            </Badge>
+                          ) : (
+                            <Badge variant="neutral" className="text-[10px]">
+                              💳 Direct Payment
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-300">
@@ -307,7 +331,14 @@ export default function TrainerDashboardPage() {
                             <span>{sessionTimeFormatted}</span>
                           </div>
                           <div className="text-slate-400 font-medium">
-                            Rate: <span className="text-white font-bold">{priceDisplay}</span>
+                            Payment:{" "}
+                            {s.paymentMethod === "coins" || s.coinsPaid ? (
+                              <span className="text-amber-400 font-bold">
+                                🪙 {s.coinsPaid || api.calculateTrainerCoins(s.price || 75)} Coins (Redeemed)
+                              </span>
+                            ) : (
+                              <span className="text-white font-bold">{priceDisplay}</span>
+                            )}
                           </div>
                         </div>
 

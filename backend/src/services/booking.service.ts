@@ -30,6 +30,8 @@ export class BookingService {
     endTime: string; // "11:00"
     sessionType?: string;
     notes?: string;
+    paymentMethod?: string;
+    coinsPaid?: number;
   }) {
     const sessionDate = new Date(data.sessionDate);
 
@@ -52,6 +54,68 @@ export class BookingService {
 
     if (existingConflict) {
       throw new Error(`The trainer is already booked at this time slot (${data.startTime} - ${data.endTime}) on this date.`);
+    }
+
+    const isCoinsPayment = data.paymentMethod === "coins";
+    const coinsRequired =
+      data.coinsPaid !== undefined
+        ? Number(data.coinsPaid)
+        : Math.max(50, Math.round(Number(trainer.hourlyRate) > 200 ? Number(trainer.hourlyRate) / 5 : Number(trainer.hourlyRate)));
+
+    if (isCoinsPayment) {
+      const member = await prisma.member.findUnique({
+        where: { id: data.memberId },
+        include: { user: true },
+      });
+      if (!member) throw new Error("Member not found.");
+
+      if (member.rewardCoins < coinsRequired) {
+        throw new Error(
+          `Insufficient coin balance. You have ${member.rewardCoins} coins, but this booking requires ${coinsRequired} coins.`
+        );
+      }
+
+      // Deduct coins inside transaction and create confirmed booking
+      return await prisma.$transaction(async (tx) => {
+        await tx.member.update({
+          where: { id: data.memberId },
+          data: { rewardCoins: { decrement: coinsRequired } },
+        });
+
+        const booking = await tx.trainerBooking.create({
+          data: {
+            memberId: data.memberId,
+            trainerId: data.trainerId,
+            sessionDate,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            sessionType: data.sessionType || "1-on-1 Fitness",
+            status: "confirmed",
+            paymentStatus: "completed",
+            price: trainer.hourlyRate,
+            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins]` : `[Redeemed ${coinsRequired} Coins]`,
+            expiresAt: null,
+          },
+          include: {
+            trainer: {
+              include: {
+                user: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: member.userId,
+            title: "Loyalty Coins Redeemed for Trainer",
+            message: `Redeemed ${coinsRequired} coins for 1-on-1 session with Coach ${trainer.user?.firstName || "Trainer"}.`,
+            type: "reward",
+          },
+        });
+
+        return booking;
+      });
     }
 
     // 3. Set unpaid booking expiration time (e.g. 30 minutes from now)

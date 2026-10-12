@@ -164,6 +164,8 @@ export interface TrainerBooking {
   sessionType: string;
   status: BookingStatus;
   paymentStatus: PaymentStatus;
+  paymentMethod?: string;
+  coinsPaid?: number;
   price: number | string;
   notes?: string | null;
   member?: Member;

@@ -17,6 +17,8 @@ import {
   Sparkles,
   Dumbbell,
   CheckCircle,
+  XCircle,
+  ShieldCheck,
   ArrowRight,
   Flame,
   Scale,
@@ -31,6 +33,8 @@ export default function MemberOverviewPage() {
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
   const [actionSuccess, setActionSuccess] = useState("");
+  const [coinBalance, setCoinBalance] = useState<number>(450);
+  const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
   // Quick Book Form State
   const [selectedTrainerId, setSelectedTrainerId] = useState("");
@@ -65,6 +69,8 @@ export default function MemberOverviewPage() {
         setSelectedTrainerId(trList[0].id);
       }
     });
+
+    setCoinBalance(api.getMemberCoins());
   }, []);
 
   const handleQuickBook = async (e: React.FormEvent) => {
@@ -72,6 +78,12 @@ export default function MemberOverviewPage() {
     const coach = trainers.find((t) => t.id === selectedTrainerId) || trainers[0];
     if (!coach) {
       alert("No personal trainer selected.");
+      return;
+    }
+
+    const coinsCost = api.calculateTrainerCoins(coach.hourlyRate);
+    if (paymentMethod === "coins" && coinBalance < coinsCost) {
+      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
       return;
     }
 
@@ -104,13 +116,28 @@ export default function MemberOverviewPage() {
         sessionType: workoutRoutine || "1-on-1 Workout Coaching",
         notes: `Target Workout: ${workoutRoutine}. ${bookingNotes || "Lifting form critique and progressive overload assistance."}`,
         price: coach.hourlyRate,
+        paymentMethod,
+        coinsPaid: paymentMethod === "coins" ? coinsCost : undefined,
       });
+
+      const updatedCoins = api.getMemberCoins();
+      setCoinBalance(updatedCoins);
+      if (member) {
+        setMember({ ...member, rewardCoins: updatedCoins });
+      }
 
       setIsQuickBookOpen(false);
       setBookingNotes("");
-      setActionSuccess(
-        `Personal trainer booked! Coach ${coach.user?.firstName} reserved for your "${workoutRoutine}" workout on ${sessionDate} at ${startTime}!`
-      );
+
+      if (paymentMethod === "coins") {
+        setActionSuccess(
+          `Personal trainer booked! Redeemed ${coinsCost} coins for Coach ${coach.user?.firstName}. Remaining balance: ${updatedCoins} coins.`
+        );
+      } else {
+        setActionSuccess(
+          `Personal trainer booked! Coach ${coach.user?.firstName} reserved for your "${workoutRoutine}" workout on ${sessionDate} at ${startTime}!`
+        );
+      }
 
       const memberId = memberRecord?.id || user?.id || "";
       const updatedBookings = await api.listBookings({ memberId });
@@ -315,11 +342,17 @@ export default function MemberOverviewPage() {
                 <Award className="w-4 h-4 text-amber-400" />
               </div>
               <div className="mt-2 text-2xl font-black text-amber-400">
-                {member?.rewardCoins || 450} Coins
+                {coinBalance} Coins
               </div>
-              <Link href="/member/rewards" className="text-[11px] text-amber-400 hover:underline mt-1 block">
-                Redeem rewards store →
-              </Link>
+              <div className="flex items-center gap-2 mt-1">
+                <Link href="/member/trainers" className="text-[11px] text-emerald-400 hover:underline">
+                  Pay Trainer with Coins →
+                </Link>
+                <span className="text-slate-600">•</span>
+                <Link href="/member/rewards" className="text-[11px] text-amber-400 hover:underline">
+                  Store →
+                </Link>
+              </div>
             </Card>
           </div>
 
@@ -502,27 +535,127 @@ export default function MemberOverviewPage() {
             />
           </div>
 
-          {chosenCoach && (
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
-              <div>
-                <span className="text-slate-400 block">
-                  Coach: <strong className="text-white">Coach {chosenCoach.user?.firstName} {chosenCoach.user?.lastName}</strong>
-                </span>
-                <span className="text-[11px] text-emerald-400">{chosenCoach.specialization}</span>
+          {chosenCoach && (() => {
+            const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate);
+            const hasSufficient = coinBalance >= coachCoins;
+
+            return (
+              <div className="space-y-3 pt-1 border-t border-slate-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white">Payment Selection</span>
+                  <span className="text-[11px] text-slate-400">
+                    Balance: <strong className="text-amber-400">{coinBalance} Coins</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("coins")}
+                    className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
+                      paymentMethod === "coins"
+                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500/50"
+                        : "bg-slate-950 border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      paymentMethod === "coins" ? "bg-amber-500/20 text-amber-400" : "bg-slate-900 text-slate-500"
+                    }`}>
+                      <Award className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">Redeem Coins</span>
+                        <span className="text-[10px] font-black text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                          {coachCoins} Coins
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {hasSufficient ? (
+                          <span className="text-emerald-400 font-medium">✓ Sufficient</span>
+                        ) : (
+                          <span className="text-rose-400 font-medium">✗ Insufficient ({coinBalance}/{coachCoins})</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
+                      paymentMethod === "cash"
+                        ? "bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500/50"
+                        : "bg-slate-950 border-slate-800 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      paymentMethod === "cash" ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-900 text-slate-500"
+                    }`}>
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">Direct Payment</span>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                          ₱{Number(chosenCoach.hourlyRate).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Cash or Card at desk
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {paymentMethod === "coins" && (
+                  <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+                    hasSufficient
+                      ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
+                      : "bg-rose-950/40 border-rose-500/40 text-rose-300"
+                  }`}>
+                    {hasSufficient ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold text-white">Sufficient Balance:</strong> {coinBalance} coins available. Remaining after booking:{" "}
+                          <strong className="text-emerald-300">{coinBalance - coachCoins} coins</strong>.
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold text-white">Insufficient Coins:</strong> You need{" "}
+                          <strong className="text-white">{coachCoins} coins</strong>, but only have{" "}
+                          <strong className="text-rose-400">{coinBalance} coins</strong>. Please choose Direct Payment or earn more coins.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <span className="text-emerald-400 font-bold text-sm block">₱{Number(chosenCoach.hourlyRate).toFixed(2)} PHP</span>
-                <span className="text-[10px] text-slate-500">60-minute private session</span>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="pt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setIsQuickBookOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={bookingLoading} disabled={trainers.length === 0}>
-              Confirm Coach Reservation
+            <Button
+              type="submit"
+              isLoading={bookingLoading}
+              disabled={
+                trainers.length === 0 ||
+                (paymentMethod === "coins" && chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate))
+              }
+              className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
+            >
+              {paymentMethod === "coins"
+                ? (chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate)
+                    ? `Insufficient Coins (${coinBalance}/${api.calculateTrainerCoins(chosenCoach.hourlyRate)})`
+                    : `Redeem Coins & Book Coach`)
+                : "Confirm Coach Reservation"}
             </Button>
           </div>
         </form>
