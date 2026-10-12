@@ -135,9 +135,25 @@ export default function AdminMembersPage() {
             Export CSV
           </Button>
           <Button size="sm" onClick={() => setIsAddModalOpen(true)} leftIcon={<UserPlus className="w-4 h-4" />}>
-            New Member
+            Manual Walk-in Entry
           </Button>
         </div>
+      </div>
+
+      {/* Live Member Auto-Roster Synchronization Notice */}
+      <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <div>
+            <span className="font-bold text-white">Direct Member Auto-Sync Active: </span>
+            <span className="text-slate-300">
+              When members join via the public enrollment portal, their full profile, digital QR pass, and plan enrollment automatically feed directly into this roster. Admin manual entry is not required.
+            </span>
+          </div>
+        </div>
+        <Badge variant="emerald" className="self-start sm:self-center shrink-0">
+          Auto-Synchronized
+        </Badge>
       </div>
 
       {actionSuccess && (
@@ -219,8 +235,11 @@ export default function AdminMembersPage() {
                             </div>
                           )}
                           <div>
-                            <div className="font-semibold text-white">
-                              {member.user?.firstName} {member.user?.lastName}
+                            <div className="font-semibold text-white flex items-center gap-1.5">
+                              <span>{member.user?.firstName} {member.user?.lastName}</span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                                Direct Sync
+                              </span>
                             </div>
                             <div className="text-[11px] text-slate-400">{member.user?.email}</div>
                           </div>
@@ -285,7 +304,10 @@ export default function AdminMembersPage() {
       </Card>
 
       {/* ADD MEMBER MODAL */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Register New Athlete Member">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Manual Front-Desk Walk-In Entry">
+        <p className="text-[11px] text-slate-400 mb-3 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          💡 <strong>Automatic Sync Notice:</strong> Members who register themselves via the public portal at <code className="text-emerald-400">/register</code> are immediately added to this roster with auto-issued QR passes. Use this form only for offline walk-in guests.
+        </p>
         <form onSubmit={handleAddMember} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>

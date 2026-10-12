@@ -34,6 +34,7 @@ export interface Member {
   fitnessGoals?: string | null;
   rewardCoins: number;
   notes?: string | null;
+  createdAt?: string;
   user?: User;
   memberships?: Membership[];
   aiActivityScores?: AiActivityScore[];
@@ -48,6 +49,7 @@ export interface Trainer {
   hourlyRate: number | string;
   rating: number | string;
   maxClients: number;
+  createdAt?: string;
   user?: User;
 }
 

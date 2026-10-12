@@ -120,16 +120,55 @@ class ApiClient {
     }
   }
 
-  async register(body: any): Promise<{ token: string; user: User }> {
+  getStoredMembers(): Member[] {
+    if (typeof window === "undefined") return [];
     try {
-      const data = await this.request<{ token: string; user: User }>("/auth/register", {
+      const stored = localStorage.getItem("apex_registered_members");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveStoredMember(member: Member) {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = this.getStoredMembers();
+      const updated = [member, ...existing.filter((m) => m.user?.email.toLowerCase() !== member.user?.email.toLowerCase())];
+      localStorage.setItem("apex_registered_members", JSON.stringify(updated));
+    } catch {}
+  }
+
+  getStoredTrainers(): Trainer[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("apex_registered_trainers");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveStoredTrainer(trainer: Trainer) {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = this.getStoredTrainers();
+      const updated = [trainer, ...existing.filter((t) => t.user?.email.toLowerCase() !== trainer.user?.email.toLowerCase())];
+      localStorage.setItem("apex_registered_trainers", JSON.stringify(updated));
+    } catch {}
+  }
+
+  async register(body: any): Promise<{ token: string; user: User }> {
+    const role = body.role === "trainer" ? "trainer" : "member";
+
+    let result: { token: string; user: User };
+    try {
+      result = await this.request<{ token: string; user: User }>("/auth/register", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      this.setSession(data.token, data.user);
-      return data;
+      this.setSession(result.token, result.user);
     } catch {
-      const role = body.role === "trainer" ? "trainer" : "member";
       const newUser: User = {
         id: `user-${Date.now()}`,
         email: body.email,
@@ -140,9 +179,79 @@ class ApiClient {
         status: "active",
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}`,
       };
+      result = { token: `mock-token-${role}`, user: newUser };
       this.setSession(`mock-token-${role}`, newUser);
-      return { token: `mock-token-${role}`, user: newUser };
     }
+
+    // Direct input of newly joined members into the Admin Roster & Profile directory
+    if (role === "member") {
+      const plan = MOCK_PLANS.find((p) => p.id === body.planId) || MOCK_PLANS[1];
+      const memberRecord: Member = {
+        id: (result.user as any).member?.id || `mem-${Date.now()}`,
+        userId: result.user.id,
+        memberCode: (result.user as any).member?.memberCode || `MEM-${Math.floor(10000 + Math.random() * 90000)}`,
+        qrCodeToken: (result.user as any).member?.qrCodeToken || `APEX-QR-${Date.now()}`,
+        dateOfBirth: "1995-06-15",
+        gender: "other",
+        emergencyContactName: "Self-Registered Athlete",
+        emergencyContactPhone: body.phone || "+63 (900) 000-0000",
+        rewardCoins: 100,
+        fitnessGoals: body.fitnessGoals || "Athletic Conditioning and Hypertrophy",
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: "member",
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          phone: result.user.phone || body.phone,
+          status: "active",
+          createdAt: new Date().toISOString(),
+        },
+        memberships: [
+          {
+            id: `sub-${Date.now()}`,
+            memberId: (result.user as any).member?.id || `mem-${Date.now()}`,
+            planId: plan.id,
+            startDate: new Date().toISOString(),
+            endDate: new Date(Date.now() + (plan.durationDays || 30) * 86400000).toISOString(),
+            status: "active",
+            autoRenew: true,
+            plan,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      };
+
+      this.saveStoredMember(memberRecord);
+      MOCK_MEMBERS.unshift(memberRecord);
+    } else if (role === "trainer") {
+      const trainerRecord: Trainer = {
+        id: (result.user as any).trainer?.id || `trainer-${Date.now()}`,
+        userId: result.user.id,
+        specialization: body.specialization || "Strength & Conditioning",
+        bio: body.bio || "Certified personal coach dedicated to helping athletes achieve peak results.",
+        hourlyRate: parseFloat(body.hourlyRate) || 750,
+        rating: 5.0,
+        experienceYears: parseInt(body.experienceYears, 10) || 3,
+        maxClients: 20,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: "trainer",
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          phone: result.user.phone || body.phone,
+          status: "active",
+          avatarUrl: `https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=150`,
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      this.saveStoredTrainer(trainerRecord);
+      MOCK_TRAINERS.unshift(trainerRecord);
+    }
+
+    return result;
   }
 
   async getMe(): Promise<User> {
@@ -157,28 +266,42 @@ class ApiClient {
 
   // MEMBERS
   async listMembers(query: { search?: string; status?: string } = {}): Promise<Member[]> {
+    const stored = this.getStoredMembers();
+    let members: Member[] = [];
+
     try {
       const params = new URLSearchParams();
       if (query.search) params.append("search", query.search);
       if (query.status) params.append("status", query.status);
-      return await this.request<Member[]>(`/members?${params.toString()}`);
+      const apiMembers = await this.request<Member[]>(`/members?${params.toString()}`);
+      
+      const storedNotPresent = stored.filter(
+        (sm) => !apiMembers.some((am) => am.user?.email.toLowerCase() === sm.user?.email.toLowerCase())
+      );
+      members = [...storedNotPresent, ...apiMembers];
     } catch {
-      let list = [...MOCK_MEMBERS];
-      if (query.search) {
-        const q = query.search.toLowerCase();
-        list = list.filter(
-          (m) =>
-            m.memberCode.toLowerCase().includes(q) ||
-            m.user?.firstName.toLowerCase().includes(q) ||
-            m.user?.lastName.toLowerCase().includes(q) ||
-            m.user?.email.toLowerCase().includes(q)
-        );
-      }
-      if (query.status) {
-        list = list.filter((m) => m.user?.status === query.status);
-      }
-      return list;
+      const storedNotPresent = stored.filter(
+        (sm) => !MOCK_MEMBERS.some((mm) => mm.user?.email.toLowerCase() === sm.user?.email.toLowerCase())
+      );
+      members = [...storedNotPresent, ...MOCK_MEMBERS];
     }
+
+    if (query.search) {
+      const q = query.search.toLowerCase();
+      members = members.filter(
+        (m) =>
+          m.memberCode.toLowerCase().includes(q) ||
+          m.user?.firstName.toLowerCase().includes(q) ||
+          m.user?.lastName.toLowerCase().includes(q) ||
+          m.user?.email.toLowerCase().includes(q)
+      );
+    }
+
+    if (query.status) {
+      members = members.filter((m) => m.user?.status === query.status);
+    }
+
+    return members;
   }
 
   async getMember(id: string): Promise<Member> {
@@ -522,10 +645,18 @@ class ApiClient {
 
   // TRAINERS & BOOKINGS
   async listTrainers(): Promise<Trainer[]> {
+    const stored = this.getStoredTrainers();
     try {
-      return await this.request<Trainer[]>("/bookings/trainers");
+      const apiTrainers = await this.request<Trainer[]>("/bookings/trainers");
+      const storedNotPresent = stored.filter(
+        (st) => !apiTrainers.some((at) => at.user?.email.toLowerCase() === st.user?.email.toLowerCase())
+      );
+      return [...storedNotPresent, ...apiTrainers];
     } catch {
-      return MOCK_TRAINERS;
+      const storedNotPresent = stored.filter(
+        (st) => !MOCK_TRAINERS.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
+      );
+      return [...storedNotPresent, ...MOCK_TRAINERS];
     }
   }
 
@@ -704,14 +835,24 @@ class ApiClient {
 
   // ANALYTICS
   async getAnalyticsOverview(): Promise<any> {
+    const extraMembers = this.getStoredMembers().length;
+    const extraTrainers = this.getStoredTrainers().length;
     try {
-      return await this.request("/analytics/overview");
+      const data = await this.request<any>("/analytics/overview");
+      if (data?.members) {
+        data.members.total += extraMembers;
+        data.members.active += extraMembers;
+      }
+      if (data?.operations) {
+        data.operations.trainers += extraTrainers;
+      }
+      return data;
     } catch {
       return {
-        members: { total: 342, active: 310, expired: 24, suspended: 8, retentionRate: 91 },
+        members: { total: 342 + extraMembers, active: 310 + extraMembers, expired: 24, suspended: 8, retentionRate: 91 },
         attendance: { today: 84 },
         revenue: { total: 48920.0, today: 1240.0 },
-        operations: { trainers: 8, classes: 14, workoutsThisMonth: 612 },
+        operations: { trainers: 8 + extraTrainers, classes: 14, workoutsThisMonth: 612 },
       };
     }
   }
