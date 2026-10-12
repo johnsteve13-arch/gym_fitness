@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,12 @@ export default function KioskPage() {
   const [result, setResult] = useState<any>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [registeredMembers, setRegisteredMembers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const stored = api.getStoredMembers();
+    setRegisteredMembers(stored);
+  }, []);
 
   const playChime = (granted: boolean) => {
     if (!soundEnabled || typeof window === "undefined") return;
@@ -195,43 +201,37 @@ export default function KioskPage() {
               </div>
             </form>
 
-            {/* Quick Test Demo Barcodes */}
-            <div className="mt-8 pt-6 border-t border-slate-800/80">
-              <div className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-1.5 uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Simulate Hardware Scanners</span>
+            {/* Quick Test Barcodes for registered members */}
+            {registeredMembers.length > 0 ? (
+              <div className="mt-8 pt-6 border-t border-slate-800/80">
+                <div className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Simulate Scanner with Registered Athletes</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {registeredMembers.slice(0, 4).map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => handleQuickScan(m.memberCode)}
+                      className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition font-mono"
+                    >
+                      <div className="text-emerald-400 font-bold truncate">
+                        {m.user?.firstName} {m.user?.lastName}
+                      </div>
+                      <div className="text-[10px] text-slate-400">{m.memberCode} (Pass Active)</div>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  onClick={() => handleQuickScan("MEM-10001")}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition font-mono"
-                >
-                  <div className="text-emerald-400 font-bold">Sarah Connor</div>
-                  <div className="text-[10px] text-slate-400">MEM-10001 (Valid Pass)</div>
-                </button>
-                <button
-                  onClick={() => handleQuickScan("MEM-10002")}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition font-mono"
-                >
-                  <div className="text-cyan-400 font-bold">Alex Mercer</div>
-                  <div className="text-[10px] text-slate-400">MEM-10002 (Active Monthly)</div>
-                </button>
-                <button
-                  onClick={() => handleQuickScan("MEM-10003")}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition font-mono"
-                >
-                  <div className="text-amber-400 font-bold">Jordan Lee</div>
-                  <div className="text-[10px] text-slate-400">MEM-10003 (Championship VIP)</div>
-                </button>
-                <button
-                  onClick={() => handleQuickScan("MEM-10004")}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition font-mono"
-                >
-                  <div className="text-red-400 font-bold">Chloe Bennett</div>
-                  <div className="text-[10px] text-slate-400">MEM-10004 (Expired Plan)</div>
-                </button>
+            ) : (
+              <div className="mt-8 pt-6 border-t border-slate-800/80 text-center text-xs text-slate-500 py-2">
+                <span>No athlete passes registered yet. </span>
+                <Link href="/register?role=member" className="text-emerald-400 hover:underline">
+                  Sign up as member
+                </Link>
+                <span> to test instant turnstile access.</span>
               </div>
-            </div>
+            )}
           </Card>
         </div>
 

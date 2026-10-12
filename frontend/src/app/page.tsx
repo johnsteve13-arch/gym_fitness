@@ -289,33 +289,48 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {trainers.map((t) => (
-              <Card key={t.id} className="glass-card border-slate-800 overflow-hidden p-0 group">
-                <div className="h-48 w-full overflow-hidden relative bg-slate-800">
-                  <img
-                    src={t.user?.avatarUrl || "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=300"}
-                    alt={t.user?.firstName || "Trainer"}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30">
-                    ★ {Number(t.rating).toFixed(2)}
+          {trainers.length === 0 ? (
+            <div className="max-w-md mx-auto text-center p-8 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">Coaching Staff Onboarding</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Personal training roster is currently onboarding. Are you an accredited coach? Apply to train at Apex today.
+              </p>
+              <Link href="/register?role=trainer">
+                <Button size="sm">Register as Coach</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {trainers.map((t) => (
+                <Card key={t.id} className="glass-card border-slate-800 overflow-hidden p-0 group">
+                  <div className="h-48 w-full overflow-hidden relative bg-slate-800">
+                    <img
+                      src={t.user?.avatarUrl || "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=300"}
+                      alt={t.user?.firstName || "Trainer"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30">
+                      ★ {Number(t.rating).toFixed(2)}
+                    </div>
                   </div>
-                </div>
-                <div className="p-6">
-                  <h3 className="text-lg font-bold text-white">
-                    {t.user?.firstName} {t.user?.lastName}
-                  </h3>
-                  <div className="text-xs text-emerald-400 font-semibold mb-3">{t.specialization}</div>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">{t.bio}</p>
-                  <div className="flex items-center justify-between border-t border-slate-800 pt-4 text-xs">
-                    <span className="text-slate-400">Experience: <strong className="text-white">{t.experienceYears} Years</strong></span>
-                    <span className="text-white font-bold">₱{Number(t.hourlyRate).toFixed(0)}/hr</span>
+                  <div className="p-6">
+                    <h3 className="text-lg font-bold text-white">
+                      {t.user?.firstName} {t.user?.lastName}
+                    </h3>
+                    <div className="text-xs text-emerald-400 font-semibold mb-3">{t.specialization}</div>
+                    <p className="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">{t.bio}</p>
+                    <div className="flex items-center justify-between border-t border-slate-800 pt-4 text-xs">
+                      <span className="text-slate-400">Experience: <strong className="text-white">{t.experienceYears} Years</strong></span>
+                      <span className="text-white font-bold">₱{Number(t.hourlyRate).toFixed(0)}/hr</span>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -336,29 +351,41 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {classes.map((c) => (
-              <Card key={c.id} className="glass-card border-slate-800 hover:border-emerald-500/40 transition">
-                <div className="flex justify-between items-start mb-3">
-                  <Badge variant="emerald" className="uppercase font-bold text-[10px]">
-                    {c.category}
-                  </Badge>
-                  <span className="text-xs text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                    {c.durationMinutes} mins
-                  </span>
-                </div>
+          {classes.length === 0 ? (
+            <div className="max-w-md mx-auto text-center p-8 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+                <Clock className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">Class Schedule Refresh</h3>
+              <p className="text-xs text-slate-400">
+                New group training clinics and workshops will be published once coaches post upcoming sessions.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {classes.map((c) => (
+                <Card key={c.id} className="glass-card border-slate-800 hover:border-emerald-500/40 transition">
+                  <div className="flex justify-between items-start mb-3">
+                    <Badge variant="emerald" className="uppercase font-bold text-[10px]">
+                      {c.category}
+                    </Badge>
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      {c.durationMinutes} mins
+                    </span>
+                  </div>
 
-                <h3 className="text-lg font-bold text-white mb-1.5">{c.name}</h3>
-                <p className="text-xs text-slate-400 mb-4 line-clamp-2">{c.description}</p>
+                  <h3 className="text-lg font-bold text-white mb-1.5">{c.name}</h3>
+                  <p className="text-xs text-slate-400 mb-4 line-clamp-2">{c.description}</p>
 
-                <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-xs text-slate-300">
-                  <span>Room: <strong className="text-white">{c.room}</strong></span>
-                  <span className="text-emerald-400 font-semibold">{c.startTime} – {c.endTime}</span>
-                </div>
-              </Card>
-            ))}
-          </div>
+                  <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-xs text-slate-300">
+                    <span>Room: <strong className="text-white">{c.room}</strong></span>
+                    <span className="text-emerald-400 font-semibold">{c.startTime} – {c.endTime}</span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

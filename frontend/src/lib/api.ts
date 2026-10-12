@@ -55,12 +55,16 @@ class ApiClient {
     return this.currentUser;
   }
 
-  // Fast demo role switcher for comprehensive testing without relogging
+  // Role switcher support
   switchDemoRole(role: "super_admin" | "admin" | "trainer" | "member"): User {
     let target = MOCK_USERS.admin;
-    if (role === "admin") target = MOCK_USERS.staff;
-    else if (role === "trainer") target = MOCK_USERS.trainer;
-    else if (role === "member") target = MOCK_USERS.member;
+    if (role === "trainer") {
+      const storedTrainers = this.getStoredTrainers();
+      if (storedTrainers[0]?.user) target = storedTrainers[0].user;
+    } else if (role === "member") {
+      const storedMembers = this.getStoredMembers();
+      if (storedMembers[0]?.user) target = storedMembers[0].user;
+    }
 
     this.setSession(`mock-jwt-token-${role}`, target);
     return target;
@@ -112,8 +116,25 @@ class ApiClient {
       this.setSession(data.token, data.user);
       return data;
     } catch {
-      // Fallback matching mock accounts
-      const user = Object.values(MOCK_USERS).find((u) => u.email.toLowerCase() === email.toLowerCase()) || MOCK_USERS.admin;
+      // Fallback matching mock accounts or registered members/trainers
+      let user = Object.values(MOCK_USERS).find((u) => u.email.toLowerCase() === email.toLowerCase());
+      if (!user) {
+        const storedMembers = this.getStoredMembers();
+        const foundM = storedMembers.find((m) => m.user?.email.toLowerCase() === email.toLowerCase());
+        if (foundM?.user) user = foundM.user;
+      }
+      if (!user) {
+        const storedTrainers = this.getStoredTrainers();
+        const foundT = storedTrainers.find((t) => t.user?.email.toLowerCase() === email.toLowerCase());
+        if (foundT?.user) user = foundT.user;
+      }
+      if (!user) {
+        if (email.toLowerCase().includes("admin")) {
+          user = MOCK_USERS.admin;
+        } else {
+          throw new Error("Invalid credentials. Please register your account at /register.");
+        }
+      }
       const result = { token: `mock-token-${user.role}`, user };
       this.setSession(result.token, result.user);
       return result;
@@ -304,11 +325,24 @@ class ApiClient {
     return members;
   }
 
-  async getMember(id: string): Promise<Member> {
+  async getMember(id: string): Promise<Member | undefined> {
     try {
       return await this.request<Member>(`/members/${id}`);
     } catch {
-      return MOCK_MEMBERS.find((m) => m.id === id || m.memberCode === id) || MOCK_MEMBERS[0];
+      const stored = this.getStoredMembers();
+      const allMembers = [...stored, ...MOCK_MEMBERS];
+      return (
+        allMembers.find(
+          (m) =>
+            m.id === id ||
+            m.memberCode === id ||
+            m.userId === id ||
+            m.user?.id === id ||
+            m.user?.email.toLowerCase() === id.toLowerCase()
+        ) ||
+        allMembers[0] ||
+        undefined
+      );
     }
   }
 
@@ -349,11 +383,12 @@ class ApiClient {
         ],
       };
       MOCK_MEMBERS.unshift(newMember);
+      this.saveStoredMember(newMember);
       return newMember;
     }
   }
 
-  async updateMember(id: string, body: any): Promise<Member> {
+  async updateMember(id: string, body: any): Promise<Member | undefined> {
     try {
       return await this.request<Member>(`/members/${id}`, {
         method: "PATCH",
@@ -367,7 +402,16 @@ class ApiClient {
         }
         return MOCK_MEMBERS[idx];
       }
-      return MOCK_MEMBERS[0];
+      const stored = this.getStoredMembers();
+      const sIdx = stored.findIndex((m) => m.id === id);
+      if (sIdx !== -1) {
+        if (body.status && stored[sIdx].user) {
+          stored[sIdx].user!.status = body.status;
+          localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+        }
+        return stored[sIdx];
+      }
+      return MOCK_MEMBERS[0] || stored[0];
     }
   }
 
@@ -377,6 +421,12 @@ class ApiClient {
     } catch {
       const idx = MOCK_MEMBERS.findIndex((m) => m.id === id);
       if (idx !== -1) MOCK_MEMBERS.splice(idx, 1);
+      const stored = this.getStoredMembers();
+      const sIdx = stored.findIndex((m) => m.id === id);
+      if (sIdx !== -1) {
+        stored.splice(sIdx, 1);
+        localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+      }
       return { success: true };
     }
   }
@@ -464,13 +514,22 @@ class ApiClient {
         body: JSON.stringify({ identifier, method }),
       });
     } catch {
-      // Mock check-in logic
-      const member = MOCK_MEMBERS.find(
+      // Offline / client fallback check-in logic
+      const stored = this.getStoredMembers();
+      const allMembers = [...stored, ...MOCK_MEMBERS];
+      const member = allMembers.find(
         (m) =>
           m.memberCode.toLowerCase() === identifier.toLowerCase() ||
           m.qrCodeToken.toLowerCase() === identifier.toLowerCase() ||
           m.user?.email.toLowerCase() === identifier.toLowerCase()
-      ) || MOCK_MEMBERS[0];
+      );
+
+      if (!member) {
+        return {
+          accessGranted: false,
+          message: "No registered athlete matches this code. Please sign up at /register first.",
+        };
+      }
 
       const newAtt: Attendance = {
         id: `att-${Date.now()}`,
@@ -480,7 +539,10 @@ class ApiClient {
         member,
       };
       MOCK_ATTENDANCES.unshift(newAtt);
-      member.rewardCoins += 15;
+      member.rewardCoins = (member.rewardCoins || 0) + 15;
+      if (stored.length > 0) {
+        localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+      }
 
       return {
         accessGranted: true,
@@ -492,7 +554,7 @@ class ApiClient {
           memberCode: member.memberCode,
           avatarUrl: member.user?.avatarUrl,
           planName: member.memberships?.[0]?.plan?.name || "Active Membership",
-          daysRemaining: 45,
+          daysRemaining: 30,
           rewardCoins: member.rewardCoins,
         },
       };
@@ -749,9 +811,15 @@ class ApiClient {
       return await this.request(`/rewards/${rewardId}/redeem`, { method: "POST" });
     } catch {
       const r = MOCK_REWARDS.find((item) => item.id === rewardId);
+      const stored = this.getStoredMembers();
+      const allMembers = [...stored, ...MOCK_MEMBERS];
+      const member = allMembers[0];
       if (r) {
-        if (MOCK_MEMBERS[0].rewardCoins >= r.pointsCost) {
-          MOCK_MEMBERS[0].rewardCoins -= r.pointsCost;
+        if (member && (member.rewardCoins || 0) >= r.pointsCost) {
+          member.rewardCoins = (member.rewardCoins || 0) - r.pointsCost;
+          if (stored.length > 0) {
+            localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+          }
           return { success: true, reward: r, message: `Redeemed ${r.title}!` };
         } else {
           throw new Error("Insufficient coins.");
@@ -806,30 +874,7 @@ class ApiClient {
     try {
       return await this.request("/ai/retention-alerts");
     } catch {
-      return [
-        {
-          type: "inactivity",
-          severity: "high",
-          memberId: "mem-4",
-          memberName: "Chloe Bennett",
-          memberCode: "MEM-10004",
-          email: "chloe@example.com",
-          phone: "+1 (555) 789-0004",
-          daysInactive: 22,
-          message: "Member has not visited the gym for 22 days. High churn risk.",
-        },
-        {
-          type: "expiration",
-          severity: "high",
-          memberId: "mem-2",
-          memberName: "Alex Mercer",
-          memberCode: "MEM-10002",
-          email: "alex@example.com",
-          phone: "+1 (555) 789-0002",
-          expiryDate: "2026-10-15",
-          message: "Membership (Monthly Athlete Pass) expires in 12 days. Auto-renewal is OFF.",
-        },
-      ];
+      return [];
     }
   }
 
@@ -849,10 +894,16 @@ class ApiClient {
       return data;
     } catch {
       return {
-        members: { total: 342 + extraMembers, active: 310 + extraMembers, expired: 24, suspended: 8, retentionRate: 91 },
-        attendance: { today: 84 },
-        revenue: { total: 48920.0, today: 1240.0 },
-        operations: { trainers: 8 + extraTrainers, classes: 14, workoutsThisMonth: 612 },
+        members: {
+          total: extraMembers,
+          active: extraMembers,
+          expired: 0,
+          suspended: 0,
+          retentionRate: extraMembers > 0 ? 100 : 0,
+        },
+        attendance: { today: 0 },
+        revenue: { total: extraMembers * 59.99, today: extraMembers > 0 ? 59.99 : 0 },
+        operations: { trainers: extraTrainers, classes: 0, workoutsThisMonth: 0 },
       };
     }
   }

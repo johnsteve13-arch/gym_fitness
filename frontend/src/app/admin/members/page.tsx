@@ -210,8 +210,18 @@ export default function AdminMembersPage() {
             <tbody className="divide-y divide-slate-800">
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
-                    No members match your current filter query.
+                  <td colSpan={6} className="px-5 py-12 text-center">
+                    <div className="max-w-sm mx-auto text-center space-y-2">
+                      <p className="text-sm font-semibold text-white">No members currently in roster</p>
+                      <p className="text-xs text-slate-400">
+                        When athletes self-register at /register, their profile and pass directly sync into this roster automatically.
+                      </p>
+                      <div className="pt-2">
+                        <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+                          Add Walk-In Member Manually
+                        </Button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (

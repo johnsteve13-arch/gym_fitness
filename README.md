@@ -127,16 +127,15 @@ Visit **`http://localhost:3000`** in your browser.
 
 ---
 
-## 🔑 Demo Access Accounts
+## 🔑 Access Accounts & Public Registration
 
-Use the one-click **Demo Portal Switcher** at the bottom-right corner of any page, or log in with credentials:
+The platform starts clean with a pre-configured Super Admin management account. All members and coaches enroll dynamically via the public registration system:
 
-| Role | Email | Password |
+| Role | Access Method | Credentials |
 |---|---|---|
-| **Super Admin** | `superadmin@apexfitness.com` | `Password@123` |
-| **Desk Staff** | `staff@apexfitness.com` | `Password@123` |
-| **Personal Trainer** | `marcus@apexfitness.com` | `Password@123` |
-| **Gym Member** | `sarah@example.com` | `Password@123` |
+| **Platform Administrator** | Direct Login at `/login` | `admin@apexfitness.com` / `Password@123` |
+| **Gym Member** | Public Self-Enrollment at `/register?role=member` | Auto-generates QR Pass, plan, and syncs directly into Admin Roster |
+| **Personal Trainer** | Coach Application at `/register?role=trainer` | Enrolls coaching profile, specialization, and hourly rates |
 
 ---
 

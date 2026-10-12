@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -25,15 +25,21 @@ interface ChatMessage {
 }
 
 export default function MemberAiCoachPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      sender: "ai",
-      text: "Welcome back, Sarah! I am your contextual Apex AI Fitness Coach. I can analyze your logged attendance (5 visits this week), recent Barbell Bench Press PR (85.0 kg), and current BMI (24.23) to optimize your training splits, recovery protocols, and athletic habits. What would you like to explore today?",
-      timestamp: "Just now",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const user = api.getCurrentUser();
+    const name = user?.firstName || "Athlete";
+    setMessages([
+      {
+        sender: "ai",
+        text: `Welcome, ${name}! I am your contextual Apex AI Fitness Coach. I can analyze your fitness goals, workouts, and attendance to optimize your training splits, recovery protocols, and athletic habits. What would you like to explore today?`,
+        timestamp: "Just now",
+      },
+    ]);
+  }, []);
 
   const promptSuggestions = [
     { label: "4-Day Athletic Split", icon: Dumbbell, query: "Recommend a 4-day upper/lower athletic hypertrophy split." },

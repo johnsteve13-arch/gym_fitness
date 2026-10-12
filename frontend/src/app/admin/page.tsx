@@ -92,14 +92,14 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-white">
-              {metrics?.members?.total || 342}
+              {metrics?.members?.total ?? 0}
             </span>
             <Badge variant="success" className="text-[10px]">
-              {metrics?.members?.retentionRate || 91}% Retention
+              {metrics?.members?.retentionRate ?? (metrics?.members?.total > 0 ? 100 : 0)}% Retention
             </Badge>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            {metrics?.members?.active || 310} Active • {metrics?.members?.expired || 24} Expired
+            {metrics?.members?.active ?? 0} Active • {metrics?.members?.expired ?? 0} Expired
           </div>
         </Card>
 
@@ -112,11 +112,11 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-white">
-              {metrics?.attendance?.today || 84}
+              {metrics?.attendance?.today ?? 0}
             </span>
-            <span className="text-xs text-cyan-400 font-semibold">+12% vs last week</span>
+            <span className="text-xs text-cyan-400 font-semibold">Live Turnstile</span>
           </div>
-          <div className="mt-2 text-xs text-slate-400">Peak hour expected at 18:00</div>
+          <div className="mt-2 text-xs text-slate-400">Reception kiosk scanner connected</div>
         </Card>
 
         <Card className="glass-card border-slate-800">
@@ -128,12 +128,12 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-white">
-              ₱{Number(metrics?.revenue?.total || 48920).toLocaleString()}
+              ₱{Number(metrics?.revenue?.total ?? 0).toLocaleString()}
             </span>
-            <Badge variant="success" className="text-[10px]">+18.4% MoM</Badge>
+            <Badge variant="success" className="text-[10px]">Active Passes</Badge>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            Today: ₱{Number(metrics?.revenue?.today || 1240).toLocaleString()}
+            Today: ₱{Number(metrics?.revenue?.today ?? 0).toLocaleString()}
           </div>
         </Card>
 
@@ -146,12 +146,12 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-white">
-              {metrics?.operations?.classes || 14}
+              {metrics?.operations?.classes ?? 0}
             </span>
             <span className="text-xs text-amber-400 font-semibold">Scheduled Classes</span>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            {metrics?.operations?.trainers || 8} Active Master Trainers
+            {metrics?.operations?.trainers ?? 0} Registered Personal Trainers
           </div>
         </Card>
       </div>
@@ -253,28 +253,36 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {recentAttendances.map((att) => (
-                <tr key={att.id} className="hover:bg-slate-800/40 transition">
-                  <td className="px-4 py-3 font-semibold text-white">
-                    {att.member?.user?.firstName} {att.member?.user?.lastName}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-slate-400">{att.member?.memberCode}</td>
-                  <td className="px-4 py-3">
-                    <span className="flex items-center gap-1.5 text-slate-300">
-                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                      {new Date(att.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="neutral" className="uppercase font-mono text-[10px]">
-                      {att.checkInMethod}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="success">Access Verified</Badge>
+              {recentAttendances.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                    No check-in activity recorded yet. Check-ins via reception kiosk will appear here live.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                recentAttendances.map((att) => (
+                  <tr key={att.id} className="hover:bg-slate-800/40 transition">
+                    <td className="px-4 py-3 font-semibold text-white">
+                      {att.member?.user?.firstName} {att.member?.user?.lastName}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-slate-400">{att.member?.memberCode}</td>
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-1.5 text-slate-300">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                        {new Date(att.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="neutral" className="uppercase font-mono text-[10px]">
+                        {att.checkInMethod}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="success">Access Verified</Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

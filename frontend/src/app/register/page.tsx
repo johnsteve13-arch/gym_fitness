@@ -165,7 +165,7 @@ function RegisterForm() {
                     type="text"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    placeholder={role === "member" ? "Sarah" : "Marcus"}
+                    placeholder="First Name"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -177,7 +177,7 @@ function RegisterForm() {
                   type="text"
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  placeholder={role === "member" ? "Connor" : "Steele"}
+                  placeholder="Last Name"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   required
                 />

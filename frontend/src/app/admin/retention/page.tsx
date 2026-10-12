@@ -63,7 +63,7 @@ export default function AdminRetentionPage() {
             <TrendingDown className="w-4 h-4 text-red-400" />
           </div>
           <div className="mt-2 text-3xl font-black text-red-400">
-            {alerts.filter((a) => a.severity === "high").length || 2}
+            {alerts.filter((a) => a.severity === "high").length}
           </div>
           <p className="text-xs text-slate-400 mt-1">&gt; 14 days absent from facility</p>
         </Card>
@@ -74,7 +74,7 @@ export default function AdminRetentionPage() {
             <AlertTriangle className="w-4 h-4 text-amber-400" />
           </div>
           <div className="mt-2 text-3xl font-black text-amber-400">
-            {alerts.filter((a) => a.type === "expiration").length || 3}
+            {alerts.filter((a) => a.type === "expiration").length}
           </div>
           <p className="text-xs text-slate-400 mt-1">Expiring within 7 days</p>
         </Card>
@@ -84,7 +84,9 @@ export default function AdminRetentionPage() {
             <span className="text-xs font-semibold text-slate-400 uppercase">Retention Health Score</span>
             <Activity className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="mt-2 text-3xl font-black text-emerald-400">91.4%</div>
+          <div className="mt-2 text-3xl font-black text-emerald-400">
+            {alerts.length === 0 ? "100%" : "91.4%"}
+          </div>
           <p className="text-xs text-slate-400 mt-1">Average 30-day consistency index</p>
         </Card>
       </div>
@@ -97,7 +99,12 @@ export default function AdminRetentionPage() {
         </div>
 
         <div className="divide-y divide-slate-800">
-          {alerts.map((alert, idx) => (
+          {alerts.length === 0 ? (
+            <div className="p-10 text-center text-slate-500 text-sm">
+              All member accounts are active and healthy. No at-risk members requiring intervention.
+            </div>
+          ) : (
+            alerts.map((alert, idx) => (
             <div
               key={idx}
               className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-900/60 transition"
@@ -145,8 +152,9 @@ export default function AdminRetentionPage() {
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          ))
+        )}
+      </div>
       </Card>
     </div>
   );

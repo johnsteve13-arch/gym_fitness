@@ -26,12 +26,25 @@ export default function MemberOverviewPage() {
   const [activeTab, setActiveTab] = useState<"pass" | "details">("pass");
 
   useEffect(() => {
-    api.getMember("mem-1").then(setMember);
+    const user = api.getCurrentUser();
+    const memberId = (user as any)?.member?.id || user?.id || "";
+    api.getMember(memberId).then((res) => {
+      if (res) setMember(res);
+      else {
+        const stored = api.getStoredMembers();
+        if (stored.length > 0) setMember(stored[0]);
+      }
+    });
   }, []);
 
   const activeMembership = member?.memberships?.[0];
-  const planName = activeMembership?.plan?.name || "Quarterly Pro Conditioning";
-  const daysRemaining = 58;
+  const planName = activeMembership?.plan?.name || "Active Membership Pass";
+  const daysRemaining = activeMembership?.endDate
+    ? Math.max(0, Math.ceil((new Date(activeMembership.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 30;
+  const expiryFormatted = activeMembership?.endDate
+    ? new Date(activeMembership.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "Active Term";
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -43,10 +56,10 @@ export default function MemberOverviewPage() {
             <span>Athletic Profile Active</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Welcome, {member?.user?.firstName || "Sarah"}!
+            Welcome, {member?.user?.firstName || "Athlete"}!
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Member Code: <strong className="text-white font-mono">{member?.memberCode || "MEM-10001"}</strong>
+            Member Code: <strong className="text-white font-mono">{member?.memberCode || "MEM-PENDING"}</strong>
           </p>
         </div>
 
@@ -80,7 +93,7 @@ export default function MemberOverviewPage() {
             {/* QR Code Container */}
             <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mx-auto my-2">
               <QRCodeSVG
-                value={member?.qrCodeToken || "APEX-MEM-10001-TOKEN-8A9B"}
+                value={member?.qrCodeToken || "APEX-MEMBER-PASS"}
                 size={180}
                 level="H"
                 includeMargin={false}
@@ -89,17 +102,17 @@ export default function MemberOverviewPage() {
 
             <div className="mt-4">
               <div className="text-base font-black text-white">
-                {member?.user?.firstName} {member?.user?.lastName}
+                {member?.user?.firstName || "Athlete"} {member?.user?.lastName || ""}
               </div>
               <div className="text-xs text-emerald-400 font-medium mt-0.5">{planName}</div>
               <div className="font-mono text-[11px] text-slate-500 mt-1">
-                Token: {member?.qrCodeToken?.slice(0, 16) || "APEX-MEM-10001"}...
+                Token: {member?.qrCodeToken?.slice(0, 16) || "APEX-PASS"}...
               </div>
             </div>
 
             <div className="mt-5 pt-3 border-t border-slate-800 flex justify-between text-[11px] text-slate-400">
               <span>Status: <strong className="text-emerald-400">Active Entry</strong></span>
-              <span>Expires: <strong className="text-white">Nov 30, 2026</strong></span>
+              <span>Expires: <strong className="text-white">{expiryFormatted}</strong></span>
             </div>
           </div>
         </div>

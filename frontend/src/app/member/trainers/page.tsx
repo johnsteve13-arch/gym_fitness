@@ -63,49 +63,61 @@ export default function MemberTrainersPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {trainers.map((t) => (
-          <Card key={t.id} className="glass-card border-slate-800 overflow-hidden p-0 flex flex-col justify-between">
-            <div>
-              <div className="h-44 w-full bg-slate-800 relative">
-                <img
-                  src={t.user?.avatarUrl || "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=300"}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-3 right-3 bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 fill-emerald-400" />
-                  <span>{Number(t.rating).toFixed(2)}</span>
+      {trainers.length === 0 ? (
+        <Card className="glass-card border-slate-800 p-12 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4">
+            <Dumbbell className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">No Coaches Available Yet</h3>
+          <p className="text-slate-400 text-sm max-w-md mx-auto">
+            Personal coaches are currently onboarding. Private 1-on-1 booking slots will open as soon as certified trainers register.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {trainers.map((t) => (
+            <Card key={t.id} className="glass-card border-slate-800 overflow-hidden p-0 flex flex-col justify-between">
+              <div>
+                <div className="h-44 w-full bg-slate-800 relative">
+                  <img
+                    src={t.user?.avatarUrl || "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=300"}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 right-3 bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-emerald-400" />
+                    <span>{Number(t.rating).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="p-5">
+                  <h3 className="text-lg font-bold text-white">
+                    {t.user?.firstName} {t.user?.lastName}
+                  </h3>
+                  <div className="text-xs text-emerald-400 font-semibold mb-2">{t.specialization}</div>
+                  <p className="text-xs text-slate-400 mb-4 line-clamp-3">{t.bio}</p>
+
+                  <div className="flex justify-between items-center text-xs text-slate-300 border-t border-slate-800 pt-3">
+                    <span>Rate: <strong className="text-emerald-400">₱{Number(t.hourlyRate).toFixed(2)}/hr</strong></span>
+                    <span>{t.experienceYears} Years Exp</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-5">
-                <h3 className="text-lg font-bold text-white">
-                  {t.user?.firstName} {t.user?.lastName}
-                </h3>
-                <div className="text-xs text-emerald-400 font-semibold mb-2">{t.specialization}</div>
-                <p className="text-xs text-slate-400 mb-4 line-clamp-3">{t.bio}</p>
-
-                <div className="flex justify-between items-center text-xs text-slate-300 border-t border-slate-800 pt-3">
-                  <span>Rate: <strong className="text-emerald-400">₱{Number(t.hourlyRate).toFixed(2)}/hr</strong></span>
-                  <span>{t.experienceYears} Years Exp</span>
-                </div>
+              <div className="p-5 pt-0">
+                <Button
+                  size="sm"
+                  className="w-full font-bold"
+                  onClick={() => setSelectedTrainer(t)}
+                  leftIcon={<Calendar className="w-4 h-4" />}
+                >
+                  Book 1-on-1 Session
+                </Button>
               </div>
-            </div>
-
-            <div className="p-5 pt-0">
-              <Button
-                size="sm"
-                className="w-full font-bold"
-                onClick={() => setSelectedTrainer(t)}
-                leftIcon={<Calendar className="w-4 h-4" />}
-              >
-                Book 1-on-1 Session
-              </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* BOOK TRAINER MODAL */}
       {selectedTrainer && (

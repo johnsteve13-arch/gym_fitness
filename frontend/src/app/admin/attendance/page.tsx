@@ -118,7 +118,7 @@ export default function AdminAttendancePage() {
                   type="text"
                   value={manualId}
                   onChange={(e) => setManualId(e.target.value)}
-                  placeholder="e.g. MEM-10001 or sarah@example.com"
+                  placeholder="e.g. MEM-10001 or athlete@apexfitness.com"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
                   required
                 />
@@ -166,7 +166,14 @@ export default function AdminAttendancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {attendances.map((att) => {
+              {attendances.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
+                    No check-in entries recorded yet. Sessions logged at reception or self-kiosk will appear here.
+                  </td>
+                </tr>
+              ) : (
+                attendances.map((att) => {
                 const isOngoing = !att.checkOutTime;
 
                 return (
@@ -222,8 +229,9 @@ export default function AdminAttendancePage() {
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
+              })
+            )}
+          </tbody>
           </table>
         </div>
       </Card>
