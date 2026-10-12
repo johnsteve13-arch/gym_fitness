@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Apex Iron Athletic Club — World-Class Fitness Platform",
+  title: "Boot Camp Fitness Gym Membership Management System",
   description:
     "Enterprise-grade gym membership management, attendance access control, smart workout tracking, personal trainer booking, and AI fitness coaching.",
 };

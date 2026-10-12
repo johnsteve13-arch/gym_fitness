@@ -55,9 +55,9 @@ export const Navbar: React.FC = () => {
             <Flame className="w-6 h-6 fill-slate-950 text-slate-950" />
           </div>
           <div>
-            <span className="text-lg font-black tracking-wider text-white">APEX IRON</span>
+            <span className="text-lg font-black tracking-wider text-white">BOOT CAMP FITNESS</span>
             <span className="block text-[10px] uppercase font-bold tracking-widest text-emerald-400 -mt-1">
-              ATHLETIC CLUB
+              GYM MEMBERSHIP MANAGEMENT SYSTEM
             </span>
           </div>
         </Link>

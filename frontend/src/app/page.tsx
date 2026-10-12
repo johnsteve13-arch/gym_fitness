@@ -80,9 +80,9 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.1] max-w-5xl mx-auto">
-            BUILT FOR THE RELENTLESS. <br />
+            BOOT CAMP FITNESS GYM <br />
             <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-cyan-400 bg-clip-text text-transparent">
-              POWERED BY INTELLIGENCE.
+              MEMBERSHIP MANAGEMENT SYSTEM
             </span>
           </h1>
 
