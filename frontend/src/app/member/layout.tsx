@@ -17,6 +17,7 @@ import {
   Flame,
   Menu,
   X,
+  UserCheck,
 } from "lucide-react";
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
@@ -27,6 +28,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
   const navItems = [
     { label: "Overview & Pass", href: "/member", icon: QrCode },
     { label: "Workout Logger", href: "/member/workouts", icon: Dumbbell },
+    { label: "Personal Trainers", href: "/member/trainers", icon: UserCheck },
     { label: "Body Composition", href: "/member/measurements", icon: Scale },
     { label: "Group Classes", href: "/member/classes", icon: Calendar },
     { label: "Rewards Shop", href: "/member/rewards", icon: Gift },

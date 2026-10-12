@@ -19,23 +19,36 @@ import {
   ArrowRight,
   Flame,
   Scale,
+  UserCheck,
 } from "lucide-react";
 
 export default function MemberOverviewPage() {
   const [member, setMember] = useState<Member | null>(null);
-  const [activeTab, setActiveTab] = useState<"pass" | "details">("pass");
+  const [bookings, setBookings] = useState<any[]>([]);
 
   useEffect(() => {
     const user = api.getCurrentUser();
-    const memberId = (user as any)?.member?.id || user?.id || "";
+    const storedMembers = api.getStoredMembers();
+    const memberRecord =
+      storedMembers.find(
+        (m) => m.userId === user?.id || m.user?.email.toLowerCase() === user?.email.toLowerCase()
+      ) || storedMembers[0];
+
+    const memberId = memberRecord?.id || (user as any)?.member?.id || user?.id || "";
+
     api.getMember(memberId).then((res) => {
       if (res) setMember(res);
-      else {
-        const stored = api.getStoredMembers();
-        if (stored.length > 0) setMember(stored[0]);
-      }
+      else if (memberRecord) setMember(memberRecord);
+    });
+
+    api.listBookings({ memberId }).then((b) => {
+      if (b) setMyBookings(b);
     });
   }, []);
+
+  const setMyBookings = (b: any[]) => {
+    setBookings(b);
+  };
 
   const activeMembership = member?.memberships?.[0];
   const planName = activeMembership?.plan?.name || "Active Membership Pass";
@@ -45,6 +58,8 @@ export default function MemberOverviewPage() {
   const expiryFormatted = activeMembership?.endDate
     ? new Date(activeMembership.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "Active Term";
+
+  const nextBooking = bookings.find((b) => b.status !== "completed") || bookings[0];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -63,7 +78,12 @@ export default function MemberOverviewPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/member/trainers">
+            <Button size="sm" variant="outline" leftIcon={<UserCheck className="w-4 h-4 text-emerald-400" />}>
+              Book Personal Trainer
+            </Button>
+          </Link>
           <Link href="/member/workouts">
             <Button size="sm" leftIcon={<Dumbbell className="w-4 h-4" />}>
               Log Workout Session
@@ -144,6 +164,45 @@ export default function MemberOverviewPage() {
             </Card>
           </div>
 
+          {/* Personal Trainer Coaching Banner / Card */}
+          <Card className="glass-card border-slate-800 p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    Personal Trainer • Workout Coaching
+                  </h3>
+                </div>
+                {nextBooking ? (
+                  <div>
+                    <p className="text-sm font-bold text-white">
+                      Scheduled: {nextBooking.trainerName || (nextBooking.trainer?.user ? `Coach ${nextBooking.trainer.user.firstName} ${nextBooking.trainer.user.lastName}` : "Certified Coach")}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {nextBooking.sessionDate} • {nextBooking.startTime} – {nextBooking.endTime} • {nextBooking.sessionType}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-bold text-white">
+                      Book a Personal Trainer for Your Workout
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Pick any certified coach you want to spot your lifts, critique form, and program your workouts.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <Link href="/member/trainers">
+                <Button size="sm" variant="outline" className="text-xs font-semibold shrink-0" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+                  {nextBooking ? "View All Sessions" : "Choose Your Trainer"}
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
           {/* AI Coach Insight Snippet */}
           <Card className="glass-card border-emerald-900/60 bg-emerald-950/20 p-5">
             <div className="flex items-center gap-2 mb-2 text-emerald-400">
@@ -164,14 +223,25 @@ export default function MemberOverviewPage() {
           </Card>
 
           {/* Quick Nav Options */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <Link
+              href="/member/trainers"
+              className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center gap-3"
+            >
+              <UserCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+              <div>
+                <div className="font-bold text-white">Personal Trainers</div>
+                <div className="text-[10px] text-slate-400">Book 1-on-1 Coach</div>
+              </div>
+            </Link>
+
             <Link
               href="/member/measurements"
               className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center gap-3"
             >
-              <Scale className="w-5 h-5 text-cyan-400" />
+              <Scale className="w-5 h-5 text-cyan-400 shrink-0" />
               <div>
-                <div className="font-bold text-white">Body Measurements</div>
+                <div className="font-bold text-white">Body Composition</div>
                 <div className="text-[10px] text-slate-400">Current BMI: 24.23</div>
               </div>
             </Link>
@@ -180,10 +250,10 @@ export default function MemberOverviewPage() {
               href="/member/classes"
               className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center gap-3"
             >
-              <Calendar className="w-5 h-5 text-emerald-400" />
+              <Calendar className="w-5 h-5 text-amber-400 shrink-0" />
               <div>
-                <div className="font-bold text-white">Upcoming Classes</div>
-                <div className="text-[10px] text-slate-400">Book Olympic Clinic</div>
+                <div className="font-bold text-white">Group Classes</div>
+                <div className="text-[10px] text-slate-400">Join Olympic Clinic</div>
               </div>
             </Link>
           </div>
