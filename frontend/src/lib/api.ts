@@ -11,7 +11,7 @@ import {
   MOCK_PAYMENTS,
   MOCK_NOTIFICATIONS,
 } from "./mockData";
-import { User, Member, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification } from "../types";
+import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification } from "../types";
 import { generateSpecificAdvice } from "./ai-advice";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -560,6 +560,18 @@ class ApiClient {
         body: JSON.stringify({ durationDays, reason }),
       });
     } catch {
+      const stored = this.getStoredMembers();
+      const user = this.getCurrentUser();
+      const m =
+        stored.find(
+          (item) =>
+            item.userId === user?.id || item.user?.email.toLowerCase() === user?.email.toLowerCase()
+        ) || stored[0];
+      if (m && m.memberships && m.memberships.length > 0) {
+        m.memberships[0].status = "frozen";
+        m.memberships[0].freezeStart = new Date().toISOString();
+        this.saveStoredMember(m);
+      }
       return { success: true, message: `Membership frozen for ${durationDays} days` };
     }
   }
@@ -568,6 +580,18 @@ class ApiClient {
     try {
       return await this.request(`/memberships/unfreeze/${id}`, { method: "POST" });
     } catch {
+      const stored = this.getStoredMembers();
+      const user = this.getCurrentUser();
+      const m =
+        stored.find(
+          (item) =>
+            item.userId === user?.id || item.user?.email.toLowerCase() === user?.email.toLowerCase()
+        ) || stored[0];
+      if (m && m.memberships && m.memberships.length > 0) {
+        m.memberships[0].status = "active";
+        m.memberships[0].freezeStart = null;
+        this.saveStoredMember(m);
+      }
       return { success: true, message: "Membership activated" };
     }
   }
@@ -580,6 +604,93 @@ class ApiClient {
       });
     } catch {
       return { success: true, message: "Membership cancelled" };
+    }
+  }
+
+  async assignOrUpgradeMembership(data: {
+    memberId?: string;
+    planId: string;
+    autoRenew?: boolean;
+    paymentMethod?: string;
+  }): Promise<any> {
+    try {
+      return await this.request("/memberships/assign", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    } catch {
+      const plans = await this.listPlans();
+      const plan = plans.find((p) => p.id === data.planId) || plans[0];
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + (plan ? plan.durationDays : 30));
+
+      const newMembership: Membership = {
+        id: `sub-${Date.now()}`,
+        memberId: data.memberId || "mem-1",
+        planId: plan ? plan.id : "plan-monthly",
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        status: "active",
+        autoRenew: !!data.autoRenew,
+        plan,
+      };
+
+      const stored = this.getStoredMembers();
+      if (stored.length > 0) {
+        const user = this.getCurrentUser();
+        const m =
+          stored.find(
+            (item) =>
+              item.userId === user?.id || item.user?.email.toLowerCase() === user?.email.toLowerCase()
+          ) || stored[0];
+        if (m) {
+          m.memberships = [newMembership, ...(m.memberships || []).filter((sub) => sub.id !== newMembership.id)];
+          this.saveStoredMember(m);
+        }
+      }
+
+      return {
+        success: true,
+        membership: newMembership,
+        message: `Membership package switched to ${plan?.name || "Selected Package"}.`,
+      };
+    }
+  }
+
+  async renewMembership(memberId?: string): Promise<any> {
+    try {
+      return await this.request("/memberships/renew", {
+        method: "POST",
+        body: JSON.stringify({ memberId }),
+      });
+    } catch {
+      const stored = this.getStoredMembers();
+      const user = this.getCurrentUser();
+      const m =
+        stored.find(
+          (item) =>
+            item.userId === user?.id || item.user?.email.toLowerCase() === user?.email.toLowerCase()
+        ) || stored[0];
+
+      if (m && m.memberships && m.memberships.length > 0) {
+        const currentSub = m.memberships[0];
+        const plan = currentSub.plan;
+        const duration = plan ? plan.durationDays : 30;
+        const baseDate = new Date(currentSub.endDate) > new Date() ? new Date(currentSub.endDate) : new Date();
+        const newEndDate = new Date(baseDate);
+        newEndDate.setDate(newEndDate.getDate() + duration);
+
+        currentSub.endDate = newEndDate.toISOString();
+        currentSub.status = "active";
+        this.saveStoredMember(m);
+        return {
+          success: true,
+          membership: currentSub,
+          message: `Membership package renewed for ${duration} days.`,
+        };
+      }
+      return { success: true, message: "Membership renewed." };
     }
   }
 

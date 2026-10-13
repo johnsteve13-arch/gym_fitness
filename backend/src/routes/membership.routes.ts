@@ -15,7 +15,7 @@ router.post("/plans", isStaffOrAdmin, MembershipController.createPlan);
 router.patch("/plans/:id", isStaffOrAdmin, MembershipController.updatePlan);
 
 // Member subscription controls
-router.post("/assign", isStaffOrAdmin, MembershipController.assignOrUpgrade);
+router.post("/assign", MembershipController.assignOrUpgrade);
 router.post("/extend/:id", isStaffOrAdmin, MembershipController.extend);
 router.post("/freeze/:id", MembershipController.freeze);
 router.post("/unfreeze/:id", MembershipController.unfreeze);

@@ -19,6 +19,7 @@ import {
   X,
   UserCheck,
   ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
 
   const navItems = [
     { label: "Overview & Pass", href: "/member", icon: QrCode },
+    { label: "Membership Package", href: "/member/package", icon: ShieldCheck },
     { label: "Workout Logger", href: "/member/workouts", icon: Dumbbell },
     { label: "Personal Trainers", href: "/member/trainers", icon: UserCheck },
     { label: "Body Composition", href: "/member/measurements", icon: Scale },

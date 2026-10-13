@@ -35,9 +35,15 @@ export class MembershipController {
 
   static async assignOrUpgrade(req: Request, res: Response, next: NextFunction) {
     try {
-      const membership = await MembershipService.assignOrUpgradeMembership(req.body);
+      const memberId = req.user?.role === "member" ? req.user.memberId : (req.body.memberId || req.user?.memberId);
+      if (!memberId) return sendError(res, "Member ID is required", 400);
+
+      const membership = await MembershipService.assignOrUpgradeMembership({
+        ...req.body,
+        memberId,
+      });
       await recordAuditLog(req, "MEMBERSHIP_ASSIGNED", "memberships", membership.id, {
-        memberId: req.body.memberId,
+        memberId,
         planId: req.body.planId,
       });
       return sendSuccess(res, membership, "Membership package assigned");

@@ -316,9 +316,11 @@ export default function MemberOverviewPage() {
               </div>
             </div>
 
-            <div className="mt-5 pt-3 border-t border-slate-800 flex justify-between text-[11px] text-slate-400">
+            <div className="mt-5 pt-3 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-400">
               <span>Status: <strong className="text-emerald-400">Active Entry</strong></span>
-              <span>Expires: <strong className="text-white">{expiryFormatted}</strong></span>
+              <Link href="/member/package" className="text-emerald-400 font-bold hover:underline">
+                Manage Package →
+              </Link>
             </div>
           </div>
         </div>
@@ -333,7 +335,9 @@ export default function MemberOverviewPage() {
                 <Clock className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="mt-2 text-2xl font-black text-white">{daysRemaining} Days</div>
-              <div className="text-[11px] text-slate-400 mt-1">Auto-renewal enabled</div>
+              <Link href="/member/package" className="text-[11px] text-emerald-400 hover:underline mt-1 block">
+                Upgrade / Renew Package →
+              </Link>
             </Card>
 
             <Card className="glass-card border-slate-800">
