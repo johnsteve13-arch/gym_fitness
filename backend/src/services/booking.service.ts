@@ -1,5 +1,6 @@
 import { prisma } from "../config/database";
 import { ENV } from "../config/env";
+import bcrypt from "bcryptjs";
 
 export class BookingService {
   static async listTrainers() {
@@ -224,4 +225,123 @@ export class BookingService {
       },
     });
   }
+
+  static async createTrainer(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    specialization?: string;
+    bio?: string;
+    experienceYears?: number;
+    hourlyRate?: number;
+    maxClients?: number;
+    password?: string;
+    avatarUrl?: string;
+  }) {
+    const email = data.email.toLowerCase().trim();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new Error("A user with this email address already exists.");
+    }
+
+    const passwordHash = await bcrypt.hash(data.password || "Password@123", 10);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: "trainer",
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        phone: data.phone?.trim() || null,
+        avatarUrl:
+          data.avatarUrl?.trim() ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.firstName}_${data.lastName}`,
+        status: "active",
+      },
+    });
+
+    const trainer = await prisma.trainer.create({
+      data: {
+        userId: user.id,
+        specialization: data.specialization || "Strength & Conditioning",
+        bio:
+          data.bio ||
+          "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
+        experienceYears: Number(data.experienceYears) || 3,
+        hourlyRate: Number(data.hourlyRate) || 75.0,
+        maxClients: Number(data.maxClients) || 20,
+        rating: 5.0,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            avatarUrl: true,
+          },
+        },
+        availabilities: true,
+      },
+    });
+
+    // Create default availability schedule (Monday - Friday 08:00 - 18:00)
+    for (let day = 1; day <= 5; day++) {
+      await prisma.trainerAvailability
+        .create({
+          data: {
+            trainerId: trainer.id,
+            dayOfWeek: day,
+            startTime: "08:00",
+            endTime: "18:00",
+            isActive: true,
+          },
+        })
+        .catch(() => null);
+    }
+
+    return trainer;
+  }
+
+  static async deleteTrainer(id: string) {
+    const trainer = await prisma.trainer.findFirst({
+      where: {
+        OR: [{ id }, { userId: id }],
+      },
+      include: { user: true },
+    });
+
+    if (!trainer) {
+      throw new Error("Trainer not found.");
+    }
+
+    // Delete or detach any gym classes assigned to this trainer
+    await prisma.gymClass
+      .deleteMany({
+        where: { trainerId: trainer.id },
+      })
+      .catch(() => null);
+
+    // Detach any workout programs assigned to this trainer
+    await prisma.workoutProgram
+      .updateMany({
+        where: { trainerId: trainer.id },
+        data: { trainerId: null },
+      })
+      .catch(() => null);
+
+    // Delete user which cascades to trainer, availabilities, and bookings
+    await prisma.user.delete({
+      where: { id: trainer.userId },
+    });
+
+    return {
+      success: true,
+      message: `Trainer ${trainer.user.firstName} ${trainer.user.lastName} permanently deleted.`,
+    };
+  }
 }
+

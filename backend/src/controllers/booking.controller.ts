@@ -57,4 +57,33 @@ export class BookingController {
       return sendError(res, err.message, 400);
     }
   }
+
+  static async createTrainer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email, firstName, lastName } = req.body;
+      if (!email || !firstName || !lastName) {
+        return sendError(res, "First name, last name, and email are required.", 400);
+      }
+      const trainer = await BookingService.createTrainer(req.body);
+      await recordAuditLog(req, "TRAINER_CREATED", "trainers", trainer.id, {
+        name: `${trainer.user.firstName} ${trainer.user.lastName}`,
+        email: trainer.user.email,
+        specialization: trainer.specialization,
+      });
+      return sendSuccess(res, trainer, "Trainer registered successfully.", 201);
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
+
+  static async deleteTrainer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id;
+      const result = await BookingService.deleteTrainer(id);
+      await recordAuditLog(req, "TRAINER_DELETED", "trainers", id);
+      return sendSuccess(res, result, "Trainer deleted successfully.");
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
 }

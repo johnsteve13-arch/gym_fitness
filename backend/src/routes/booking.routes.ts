@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { BookingController } from "../controllers/booking.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { isStaffOrAdmin } from "../middleware/role.middleware";
 
 const router = Router();
 
 router.get("/trainers", BookingController.listTrainers);
 
 router.use(authenticate);
+
+router.post("/trainers", isStaffOrAdmin, BookingController.createTrainer);
+router.delete("/trainers/:id", isStaffOrAdmin, BookingController.deleteTrainer);
 
 router.post("/", BookingController.createBooking);
 router.get("/", BookingController.listBookings);

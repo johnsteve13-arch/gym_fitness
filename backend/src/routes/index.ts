@@ -12,6 +12,7 @@ import rewardRoutes from "./reward.routes";
 import aiRoutes from "./ai.routes";
 import notificationRoutes from "./notification.routes";
 import analyticsRoutes from "./analytics.routes";
+import trainerRoutes from "./trainer.routes";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.use("/attendance", attendanceRoutes);
 router.use("/workouts", workoutRoutes);
 router.use("/measurements", measurementRoutes);
 router.use("/bookings", bookingRoutes);
+router.use("/trainers", trainerRoutes);
 router.use("/classes", classRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/rewards", rewardRoutes);

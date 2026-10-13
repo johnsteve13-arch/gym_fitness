@@ -180,6 +180,60 @@ class ApiClient {
       const existing = this.getStoredTrainers();
       const updated = [trainer, ...existing.filter((t) => t.user?.email.toLowerCase() !== trainer.user?.email.toLowerCase())];
       localStorage.setItem("apex_registered_trainers", JSON.stringify(updated));
+
+      // If re-adding a previously deleted trainer, remove from deleted IDs
+      const deletedIds = this.getDeletedTrainerIds().filter(
+        (id) =>
+          id !== trainer.id.toLowerCase() &&
+          id !== trainer.userId?.toLowerCase() &&
+          id !== trainer.user?.id?.toLowerCase() &&
+          id !== trainer.user?.email.toLowerCase()
+      );
+      localStorage.setItem("apex_deleted_trainer_ids", JSON.stringify(deletedIds));
+    } catch {}
+  }
+
+  getDeletedTrainerIds(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("apex_deleted_trainer_ids");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  deleteStoredTrainer(idOrEmail: string) {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = this.getStoredTrainers();
+      const targetLower = idOrEmail.toLowerCase();
+      const updated = existing.filter(
+        (t) =>
+          t.id.toLowerCase() !== targetLower &&
+          t.userId?.toLowerCase() !== targetLower &&
+          t.user?.id?.toLowerCase() !== targetLower &&
+          t.user?.email.toLowerCase() !== targetLower
+      );
+      localStorage.setItem("apex_registered_trainers", JSON.stringify(updated));
+
+      const deletedIds = this.getDeletedTrainerIds();
+      if (!deletedIds.includes(targetLower)) {
+        deletedIds.push(targetLower);
+        localStorage.setItem("apex_deleted_trainer_ids", JSON.stringify(deletedIds));
+      }
+
+      // Also clean up bookings for this trainer
+      const bookings = this.getStoredBookings();
+      const cleanBookings = bookings.filter(
+        (b) =>
+          b.trainerId?.toLowerCase() !== targetLower &&
+          b.trainerUserId?.toLowerCase() !== targetLower &&
+          b.trainer?.id?.toLowerCase() !== targetLower &&
+          b.trainer?.email?.toLowerCase() !== targetLower &&
+          b.trainer?.user?.email?.toLowerCase() !== targetLower
+      );
+      localStorage.setItem("apex_trainer_bookings", JSON.stringify(cleanBookings));
     } catch {}
   }
 
@@ -731,18 +785,83 @@ class ApiClient {
   // TRAINERS & BOOKINGS
   async listTrainers(): Promise<Trainer[]> {
     const stored = this.getStoredTrainers();
+    const deletedIds = this.getDeletedTrainerIds();
+    const isNotDeleted = (t: Trainer) => {
+      const id = (t.id || "").toLowerCase();
+      const uid = (t.userId || t.user?.id || "").toLowerCase();
+      const email = (t.user?.email || "").toLowerCase();
+      return (
+        !deletedIds.includes(id) &&
+        !deletedIds.includes(uid) &&
+        !deletedIds.includes(email)
+      );
+    };
+
+    let allTrainers: Trainer[] = [];
     try {
       const apiTrainers = await this.request<Trainer[]>("/bookings/trainers");
       const storedNotPresent = stored.filter(
         (st) => !apiTrainers.some((at) => at.user?.email.toLowerCase() === st.user?.email.toLowerCase())
       );
-      return [...storedNotPresent, ...apiTrainers];
+      allTrainers = [...storedNotPresent, ...apiTrainers];
     } catch {
       const storedNotPresent = stored.filter(
         (st) => !MOCK_TRAINERS.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
       );
-      return [...storedNotPresent, ...MOCK_TRAINERS];
+      allTrainers = [...storedNotPresent, ...MOCK_TRAINERS];
     }
+
+    return allTrainers.filter(isNotDeleted);
+  }
+
+  async createTrainer(body: any): Promise<Trainer> {
+    try {
+      const res = await this.request<any>("/bookings/trainers", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const trainer: Trainer = res.data || res;
+      this.saveStoredTrainer(trainer);
+      return trainer;
+    } catch {
+      const id = `tr-${Date.now()}`;
+      const userId = `usr-${Date.now()}`;
+      const newTrainer: Trainer = {
+        id,
+        userId,
+        specialization: body.specialization || "Strength & Conditioning",
+        bio: body.bio || "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
+        experienceYears: Number(body.experienceYears) || 3,
+        hourlyRate: Number(body.hourlyRate) || 75.0,
+        rating: 5.0,
+        maxClients: Number(body.maxClients) || 20,
+        createdAt: new Date().toISOString(),
+        user: {
+          id: userId,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          email: body.email,
+          phone: body.phone || "",
+          avatarUrl:
+            body.avatarUrl ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}_${body.lastName}`,
+          role: "trainer",
+          status: "active",
+        },
+      };
+      this.saveStoredTrainer(newTrainer);
+      return newTrainer;
+    }
+  }
+
+  async deleteTrainer(id: string): Promise<any> {
+    try {
+      await this.request(`/bookings/trainers/${id}`, { method: "DELETE" });
+    } catch {
+      // Offline or error fallback
+    }
+    this.deleteStoredTrainer(id);
+    return { success: true, message: "Trainer removed successfully." };
   }
 
   calculateTrainerCoins(hourlyRate: number | string): number {
