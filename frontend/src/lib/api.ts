@@ -11,7 +11,7 @@ import {
   MOCK_PAYMENTS,
   MOCK_NOTIFICATIONS,
 } from "./mockData";
-import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification } from "../types";
+import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus } from "../types";
 import { generateSpecificAdvice } from "./ai-advice";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -43,6 +43,13 @@ class ApiClient {
       localStorage.setItem("apex_gym_token", token);
       localStorage.setItem("apex_gym_user", JSON.stringify(user));
     }
+  }
+
+  getToken(): string | null {
+    if (!this.token && typeof window !== "undefined") {
+      this.token = localStorage.getItem("apex_gym_token");
+    }
+    return this.token;
   }
 
   logout() {
@@ -274,7 +281,7 @@ class ApiClient {
         firstName: body.firstName,
         lastName: body.lastName,
         phone: body.phone,
-        status: "active",
+        status: role === "trainer" ? "pending" : "active",
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}`,
       };
       result = { token: `mock-token-${role}`, user: newUser };
@@ -339,7 +346,7 @@ class ApiClient {
           firstName: result.user.firstName,
           lastName: result.user.lastName,
           phone: result.user.phone || body.phone,
-          status: "active",
+          status: (result.user.status as AccountStatus) || "pending",
           avatarUrl: `https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=150`,
           createdAt: new Date().toISOString(),
         },
@@ -356,8 +363,22 @@ class ApiClient {
     try {
       const user = await this.request<User>("/auth/me");
       this.currentUser = user;
+      localStorage.setItem("apex_user", JSON.stringify(user));
       return user;
     } catch {
+      if (this.currentUser?.role === "trainer") {
+        const storedTrainers = this.getStoredTrainers();
+        const found = storedTrainers.find(
+          (t) =>
+            t.userId?.toLowerCase() === this.currentUser?.id.toLowerCase() ||
+            t.user?.id?.toLowerCase() === this.currentUser?.id.toLowerCase() ||
+            t.user?.email.toLowerCase() === this.currentUser?.email.toLowerCase()
+        );
+        if (found?.user?.status) {
+          this.currentUser.status = found.user.status;
+          localStorage.setItem("apex_gym_user", JSON.stringify(this.currentUser));
+        }
+      }
       return this.currentUser;
     }
   }
@@ -894,7 +915,7 @@ class ApiClient {
   }
 
   // TRAINERS & BOOKINGS
-  async listTrainers(): Promise<Trainer[]> {
+  async listTrainers(options?: { includePending?: boolean }): Promise<Trainer[]> {
     const stored = this.getStoredTrainers();
     const deletedIds = this.getDeletedTrainerIds();
     const isNotDeleted = (t: Trainer) => {
@@ -909,8 +930,9 @@ class ApiClient {
     };
 
     let allTrainers: Trainer[] = [];
+    const queryParam = options?.includePending ? "?includePending=true" : "";
     try {
-      const apiTrainers = await this.request<Trainer[]>("/bookings/trainers");
+      const apiTrainers = await this.request<Trainer[]>(`/bookings/trainers${queryParam}`);
       const storedNotPresent = stored.filter(
         (st) => !apiTrainers.some((at) => at.user?.email.toLowerCase() === st.user?.email.toLowerCase())
       );
@@ -922,7 +944,14 @@ class ApiClient {
       allTrainers = [...storedNotPresent, ...MOCK_TRAINERS];
     }
 
-    return allTrainers.filter(isNotDeleted);
+    const validTrainers = allTrainers.filter(isNotDeleted);
+
+    if (options?.includePending) {
+      return validTrainers;
+    }
+
+    // Default: only return confirmed/active trainers
+    return validTrainers.filter((t) => t.user?.status !== "pending");
   }
 
   async createTrainer(body: any): Promise<Trainer> {
@@ -963,6 +992,63 @@ class ApiClient {
       this.saveStoredTrainer(newTrainer);
       return newTrainer;
     }
+  }
+
+  async approveTrainer(id: string): Promise<any> {
+    try {
+      await this.request(`/bookings/trainers/${id}/approve`, { method: "PATCH" });
+    } catch {
+      // Local fallback
+    }
+
+    // Update in locally stored trainers
+    const stored = this.getStoredTrainers();
+    const targetLower = id.toLowerCase();
+    const updated = stored.map((t) => {
+      const match =
+        t.id.toLowerCase() === targetLower ||
+        t.userId?.toLowerCase() === targetLower ||
+        t.user?.id?.toLowerCase() === targetLower ||
+        t.user?.email.toLowerCase() === targetLower;
+      if (match && t.user) {
+        return {
+          ...t,
+          user: {
+            ...t.user,
+            status: "active" as AccountStatus,
+          },
+        };
+      }
+      return t;
+    });
+    localStorage.setItem("apex_registered_trainers", JSON.stringify(updated));
+
+    // Update MOCK_TRAINERS if present
+    const mock = MOCK_TRAINERS.find(
+      (t) =>
+        t.id.toLowerCase() === targetLower ||
+        t.userId?.toLowerCase() === targetLower ||
+        t.user?.id?.toLowerCase() === targetLower ||
+        t.user?.email.toLowerCase() === targetLower
+    );
+    if (mock && mock.user) {
+      mock.user.status = "active";
+    }
+
+    // If current logged-in user matches this trainer, update their session status to active
+    const currentUser = this.getCurrentUser();
+    if (
+      currentUser &&
+      (currentUser.id.toLowerCase() === targetLower ||
+        currentUser.email.toLowerCase() === targetLower ||
+        (currentUser as any).trainer?.id?.toLowerCase() === targetLower)
+    ) {
+      currentUser.status = "active";
+      this.currentUser = currentUser;
+      localStorage.setItem("apex_gym_user", JSON.stringify(currentUser));
+    }
+
+    return { success: true, message: "Trainer registration confirmed and approved." };
   }
 
   async deleteTrainer(id: string): Promise<any> {

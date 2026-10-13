@@ -38,7 +38,7 @@ export class AuthService {
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         phone: data.phone?.trim() || null,
-        status: "active",
+        status: role === "trainer" ? "pending" : "active",
       },
     });
 
@@ -113,6 +113,15 @@ export class AuthService {
           hourlyRate: Number(data.hourlyRate) || 750.0,
         },
       });
+
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          title: "Trainer Registration Received",
+          message: "Your coach profile has been registered and is pending admin confirmation. You will be able to access your dashboard once approved.",
+          type: "system",
+        },
+      }).catch(() => null);
     }
 
     const token = this.generateToken({

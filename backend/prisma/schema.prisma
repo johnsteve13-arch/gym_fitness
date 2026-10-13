@@ -21,6 +21,7 @@ enum AccountStatus {
   active
   suspended
   inactive
+  pending
 }
 
 enum PlanType {

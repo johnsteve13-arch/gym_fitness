@@ -36,15 +36,28 @@ export default function TrainerDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed">("all");
 
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusMessageType, setStatusMessageType] = useState<"info" | "success">("info");
+
   const loadData = async (user: any) => {
     setLoading(true);
     setCurrentUser(user);
     const storedTrainers = api.getStoredTrainers();
     const found = storedTrainers.find(
-      (t) => t.userId === user?.id || t.user?.email?.toLowerCase() === user?.email?.toLowerCase()
+      (t) =>
+        t.userId?.toLowerCase() === user?.id?.toLowerCase() ||
+        t.user?.id?.toLowerCase() === user?.id?.toLowerCase() ||
+        t.user?.email?.toLowerCase() === user?.email?.toLowerCase()
     );
     if (found) {
       setTrainerProfile(found);
+      // Synchronize status if stored trainer has updated status
+      if (found.user?.status && found.user.status !== user.status) {
+        user.status = found.user.status;
+        setCurrentUser({ ...user });
+        api.setSession(api.getToken() || "", user);
+      }
     }
 
     try {
@@ -71,6 +84,57 @@ export default function TrainerDashboardPage() {
     }
   }, [router]);
 
+  const handleCheckStatus = async () => {
+    setCheckingStatus(true);
+    setStatusMessage("");
+    try {
+      // 1. Try fetching refreshed profile from backend
+      const refreshedUser = await api.getMe();
+      if (refreshedUser && refreshedUser.status === "active") {
+        setCurrentUser(refreshedUser);
+        setStatusMessageType("success");
+        setStatusMessage("Registration approved! Unlocking your coach dashboard...");
+        setTimeout(() => {
+          loadData(refreshedUser);
+        }, 1200);
+        return;
+      }
+
+      // 2. Also check stored trainers
+      const stored = api.getStoredTrainers();
+      const currentId = currentUser?.id?.toLowerCase();
+      const currentEmail = currentUser?.email?.toLowerCase();
+      const match = stored.find(
+        (t) =>
+          t.userId?.toLowerCase() === currentId ||
+          t.user?.id?.toLowerCase() === currentId ||
+          t.user?.email?.toLowerCase() === currentEmail
+      );
+
+      if (match?.user?.status === "active") {
+        const updated = { ...currentUser, status: "active" };
+        setCurrentUser(updated);
+        api.setSession(api.getToken() || "", updated);
+        setStatusMessageType("success");
+        setStatusMessage("Registration confirmed by administrator! Unlocking your coach dashboard...");
+        setTimeout(() => {
+          loadData(updated);
+        }, 1200);
+        return;
+      }
+
+      setStatusMessageType("info");
+      setStatusMessage("Your trainer registration is currently pending admin confirmation. Please check back shortly or notify your gym administrator.");
+      setTimeout(() => setStatusMessage(""), 5000);
+    } catch (err) {
+      setStatusMessageType("info");
+      setStatusMessage("Unable to verify status at this moment. Please try again shortly.");
+      setTimeout(() => setStatusMessage(""), 5000);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
   if (!authorized) {
     return (
       <div className="min-h-screen bg-[#090D14] flex items-center justify-center p-4">
@@ -78,6 +142,230 @@ export default function TrainerDashboardPage() {
           <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs text-slate-400">Verifying Coach Access...</p>
         </div>
+      </div>
+    );
+  }
+
+  const isPending =
+    currentUser?.status === "pending" ||
+    (trainerProfile?.user?.status === "pending" && currentUser?.status !== "active");
+
+  if (isPending) {
+    const appSpecialization = trainerProfile?.specialization || "Strength & Conditioning";
+    const appRate = trainerProfile?.hourlyRate ? `₱${Number(trainerProfile.hourlyRate).toFixed(2)}` : "₱750.00";
+    const appExp = trainerProfile?.experienceYears || 3;
+    const appBio = trainerProfile?.bio || "Certified coach awaiting profile authorization.";
+
+    return (
+      <div className="min-h-screen bg-[#090D14] text-white">
+        {/* Navigation Bar */}
+        <header className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <Flame className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-black tracking-tight text-white flex items-center gap-2">
+                  BOOT CAMP FITNESS
+                  <Badge variant="amber" className="text-[10px] py-0 px-2 font-mono">
+                    PENDING CONFIRMATION
+                  </Badge>
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium">
+                  GYM MEMBERSHIP MANAGEMENT SYSTEM • TRAINER PORTAL
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className="text-xs font-bold text-white">
+                  Coach {currentUser?.firstName} {currentUser?.lastName}
+                </div>
+                <div className="text-[10px] text-slate-400">{currentUser?.email}</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  api.logout();
+                  router.push("/login");
+                }}
+                leftIcon={<LogOut className="w-3.5 h-3.5" />}
+              >
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Pending Screen Content */}
+        <main className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+          <div className="space-y-6">
+            {/* Status Feedback Banner */}
+            {statusMessage && (
+              <div
+                className={`p-4 rounded-2xl border text-xs flex items-center gap-3 shadow-xl animate-in fade-in ${
+                  statusMessageType === "success"
+                    ? "bg-emerald-950/80 border-emerald-600 text-emerald-300 shadow-emerald-950/40"
+                    : "bg-amber-950/80 border-amber-600 text-amber-300 shadow-amber-950/40"
+                }`}
+              >
+                {statusMessageType === "success" ? (
+                  <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                ) : (
+                  <Clock className="w-4 h-4 shrink-0 text-amber-400" />
+                )}
+                <span className="font-semibold">{statusMessage}</span>
+              </div>
+            )}
+
+            {/* Hero Locked Card */}
+            <Card className="glass-card border-slate-800 p-8 sm:p-10 relative overflow-hidden text-center">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10 max-w-2xl mx-auto">
+                <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-amber-500/10">
+                  <Clock className="w-10 h-10 animate-pulse" />
+                </div>
+
+                <Badge variant="amber" className="text-xs py-1 px-3 font-bold mb-3 uppercase tracking-wider">
+                  Registration Awaiting Admin Confirmation
+                </Badge>
+
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-3">
+                  Trainer Dashboard Locked
+                </h1>
+
+                <p className="text-slate-300 text-sm leading-relaxed mb-8">
+                  The gym administrator needs to confirm your trainer registration before you can access your dashboard, build workout programs, and accept member bookings.
+                </p>
+
+                {/* Steps Visualizer */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 text-left">
+                  <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30">
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold mb-1">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Step 1: Submitted</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Registration submitted to Boot Camp Fitness
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40">
+                    <div className="flex items-center gap-2 text-amber-300 text-xs font-bold mb-1">
+                      <Clock className="w-4 h-4 animate-spin" />
+                      <span>Step 2: Admin Review</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Pending confirmation in Admin Trainers Hub
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800 opacity-60">
+                    <div className="flex items-center gap-2 text-slate-400 text-xs font-bold mb-1">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Step 3: Unlocked</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Full dashboard access and client booking enabled
+                    </p>
+                  </div>
+                </div>
+
+                {/* Submitted Application Summary Card */}
+                <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left space-y-3 mb-8">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Submitted Application Details
+                    </span>
+                    <Badge variant="amber" className="text-[10px]">
+                      Status: Pending Approval
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Full Name:</span>
+                      <strong className="text-white font-semibold">
+                        Coach {currentUser?.firstName} {currentUser?.lastName}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Email Address:</span>
+                      <strong className="text-white font-semibold">{currentUser?.email}</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Specialization:</span>
+                      <strong className="text-emerald-400 font-semibold">{appSpecialization}</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Session Hourly Rate:</span>
+                      <strong className="text-white font-semibold">{appRate} / hr</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Coaching Experience:</span>
+                      <strong className="text-white font-semibold">{appExp} Years</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Phone Number:</span>
+                      <strong className="text-white font-semibold">{currentUser?.phone || "Not specified"}</strong>
+                    </div>
+                  </div>
+
+                  {appBio && (
+                    <div className="pt-2 border-t border-slate-900 text-xs">
+                      <span className="text-slate-500 text-[11px] block mb-1">Coaching Bio:</span>
+                      <p className="text-slate-400 italic line-clamp-2">{appBio}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Primary Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <Button
+                    size="md"
+                    onClick={handleCheckStatus}
+                    disabled={checkingStatus}
+                    leftIcon={
+                      <RefreshCw
+                        className={`w-4 h-4 ${checkingStatus ? "animate-spin text-emerald-300" : ""}`}
+                      />
+                    }
+                    className="w-full sm:w-auto font-bold shadow-lg shadow-emerald-950/40"
+                  >
+                    {checkingStatus ? "Checking Confirmation..." : "Check Status / Refresh"}
+                  </Button>
+
+                  <Button
+                    size="md"
+                    variant="outline"
+                    onClick={() => {
+                      api.logout();
+                      router.push("/login");
+                    }}
+                    leftIcon={<LogOut className="w-4 h-4" />}
+                    className="w-full sm:w-auto"
+                  >
+                    Sign Out
+                  </Button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-6">
+                  Need expedited approval? Reach out to the front desk or gym administration directly.
+                </p>
+              </div>
+            </Card>
+          </div>
+        </main>
       </div>
     );
   }

@@ -10,6 +10,7 @@ router.get("/", BookingController.listTrainers);
 router.use(authenticate);
 
 router.post("/", isStaffOrAdmin, BookingController.createTrainer);
+router.patch("/:id/approve", isStaffOrAdmin, BookingController.approveTrainer);
 router.delete("/:id", isStaffOrAdmin, BookingController.deleteTrainer);
 
 export default router;

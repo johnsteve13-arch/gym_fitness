@@ -10,6 +10,7 @@ router.get("/trainers", BookingController.listTrainers);
 router.use(authenticate);
 
 router.post("/trainers", isStaffOrAdmin, BookingController.createTrainer);
+router.patch("/trainers/:id/approve", isStaffOrAdmin, BookingController.approveTrainer);
 router.delete("/trainers/:id", isStaffOrAdmin, BookingController.deleteTrainer);
 
 router.post("/", BookingController.createBooking);

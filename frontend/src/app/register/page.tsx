@@ -17,6 +17,7 @@ import {
   Dumbbell,
   CheckCircle2,
   Award,
+  Clock,
 } from "lucide-react";
 
 function RegisterForm() {
@@ -320,6 +321,13 @@ function RegisterForm() {
                     placeholder="Summarize your training background, certifications, and philosophy."
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-start gap-2.5">
+                  <Clock className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                  <span>
+                    <strong className="text-white">Admin Confirmation Required:</strong> Once registered, gym administration must confirm your coach profile before you can access the trainer dashboard.
+                  </span>
                 </div>
               </>
             )}

@@ -3,8 +3,14 @@ import { ENV } from "../config/env";
 import bcrypt from "bcryptjs";
 
 export class BookingService {
-  static async listTrainers() {
+  static async listTrainers(params?: { includePending?: boolean }) {
+    const where: any = {};
+    if (!params?.includePending) {
+      where.user = { status: "active" };
+    }
+
     return prisma.trainer.findMany({
+      where,
       include: {
         user: {
           select: {
@@ -14,6 +20,7 @@ export class BookingService {
             email: true,
             phone: true,
             avatarUrl: true,
+            status: true,
           },
         },
         availabilities: {
@@ -341,6 +348,43 @@ export class BookingService {
     return {
       success: true,
       message: `Trainer ${trainer.user.firstName} ${trainer.user.lastName} permanently deleted.`,
+    };
+  }
+
+  static async approveTrainer(id: string) {
+    const trainer = await prisma.trainer.findFirst({
+      where: {
+        OR: [{ id }, { userId: id }],
+      },
+      include: { user: true },
+    });
+
+    if (!trainer) {
+      throw new Error("Trainer not found.");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: trainer.userId },
+      data: { status: "active" },
+    });
+
+    // Create confirmation notification for the trainer
+    await prisma.notification.create({
+      data: {
+        userId: trainer.userId,
+        title: "Trainer Registration Confirmed!",
+        message: "Your trainer account has been confirmed by gym administration. You now have full access to your trainer dashboard.",
+        type: "system",
+      },
+    }).catch(() => null);
+
+    return {
+      success: true,
+      message: `Trainer ${trainer.user.firstName} ${trainer.user.lastName} has been confirmed and activated.`,
+      trainer: {
+        ...trainer,
+        user: updatedUser,
+      },
     };
   }
 }

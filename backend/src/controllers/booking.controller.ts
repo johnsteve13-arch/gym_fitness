@@ -6,7 +6,11 @@ import { recordAuditLog } from "../middleware/audit.middleware";
 export class BookingController {
   static async listTrainers(req: Request, res: Response, next: NextFunction) {
     try {
-      const trainers = await BookingService.listTrainers();
+      const includePending =
+        req.query.includePending === "true" ||
+        req.user?.role === "admin" ||
+        req.user?.role === "super_admin";
+      const trainers = await BookingService.listTrainers({ includePending });
       return sendSuccess(res, trainers);
     } catch (err: any) {
       return sendError(res, err.message, 500);
@@ -82,6 +86,17 @@ export class BookingController {
       const result = await BookingService.deleteTrainer(id);
       await recordAuditLog(req, "TRAINER_DELETED", "trainers", id);
       return sendSuccess(res, result, "Trainer deleted successfully.");
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
+
+  static async approveTrainer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id;
+      const result = await BookingService.approveTrainer(id);
+      await recordAuditLog(req, "TRAINER_APPROVED", "trainers", id);
+      return sendSuccess(res, result, "Trainer registration confirmed.");
     } catch (err: any) {
       return sendError(res, err.message, 400);
     }

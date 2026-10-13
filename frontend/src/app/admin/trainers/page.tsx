@@ -22,6 +22,7 @@ import {
   Briefcase,
   Award,
   Sparkles,
+  Clock,
 } from "lucide-react";
 
 const SPECIALIZATION_PRESETS = [
@@ -64,13 +65,33 @@ export default function AdminTrainersPage() {
     password: "Password@123",
   });
 
+  const [statusTab, setStatusTab] = useState<"all" | "active" | "pending">("all");
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
   const loadTrainers = async () => {
     setLoading(true);
     try {
-      const data = await api.listTrainers();
+      const data = await api.listTrainers({ includePending: true });
       setTrainers(data);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveTrainer = async (trainer: Trainer) => {
+    setApprovingId(trainer.id);
+    setActionError("");
+    try {
+      await api.approveTrainer(trainer.id);
+      setActionSuccess(
+        `Registration confirmed! Coach ${trainer.user?.firstName} ${trainer.user?.lastName} is now active and can access their trainer dashboard.`
+      );
+      setTimeout(() => setActionSuccess(""), 5000);
+      await loadTrainers();
+    } catch (err: any) {
+      setActionError(err.message || "Failed to confirm trainer registration.");
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -154,6 +175,9 @@ export default function AdminTrainersPage() {
     }
   };
 
+  const pendingTrainers = trainers.filter((t) => t.user?.status === "pending");
+  const activeTrainers = trainers.filter((t) => t.user?.status !== "pending");
+
   // Filtered trainers list
   const filteredTrainers = trainers.filter((t) => {
     const fullName = `${t.user?.firstName || ""} ${t.user?.lastName || ""}`.toLowerCase();
@@ -166,7 +190,13 @@ export default function AdminTrainersPage() {
       specializationFilter === "all" ||
       spec.toLowerCase().includes(specializationFilter.toLowerCase());
 
-    return matchesSearch && matchesSpec;
+    const isPending = t.user?.status === "pending";
+    const matchesStatus =
+      statusTab === "all" ||
+      (statusTab === "pending" && isPending) ||
+      (statusTab === "active" && !isPending);
+
+    return matchesSearch && matchesSpec && matchesStatus;
   });
 
   // Calculate statistics
@@ -184,7 +214,7 @@ export default function AdminTrainersPage() {
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Coaching Staff & Personal Trainers</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Add certified fitness specialists, configure hourly rates, client capacities, and manage coaching roster
+            Add certified fitness specialists, configure hourly rates, client capacities, and confirm trainer registrations
           </p>
         </div>
 
@@ -217,14 +247,36 @@ export default function AdminTrainersPage() {
       )}
 
       {/* Quick Metrics Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="glass-card border-slate-800 p-4">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Total Certified Coaches</span>
+            <span>Total Registered Coaches</span>
             <Users className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="mt-2 text-2xl font-black text-white">{totalTrainers}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Active staff in directory</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">{activeTrainers.length} active coaches</div>
+        </Card>
+
+        <Card
+          className={`glass-card p-4 transition cursor-pointer ${
+            pendingTrainers.length > 0
+              ? "border-amber-500/50 bg-amber-950/20 hover:border-amber-400"
+              : "border-slate-800"
+          }`}
+          onClick={() => setStatusTab(pendingTrainers.length > 0 ? "pending" : "all")}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span className={pendingTrainers.length > 0 ? "text-amber-300 font-semibold" : ""}>
+              Pending Confirmation
+            </span>
+            <Clock className={`w-4 h-4 ${pendingTrainers.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-500"}`} />
+          </div>
+          <div className={`mt-2 text-2xl font-black ${pendingTrainers.length > 0 ? "text-amber-400" : "text-slate-400"}`}>
+            {pendingTrainers.length}
+          </div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            {pendingTrainers.length > 0 ? "Requires admin confirmation" : "No pending applications"}
+          </div>
         </Card>
 
         <Card className="glass-card border-slate-800 p-4">
@@ -244,6 +296,127 @@ export default function AdminTrainersPage() {
           <div className="mt-2 text-2xl font-black text-amber-400">{uniqueSpecs} Disciplines</div>
           <div className="text-[11px] text-slate-500 mt-0.5">Strength, Hypertrophy, Mobility, etc.</div>
         </Card>
+      </div>
+
+      {/* Pending Trainer Registrations Alert Banner & Review Section */}
+      {pendingTrainers.length > 0 && (
+        <Card className="glass-card border-amber-500/50 bg-amber-950/25 p-5 rounded-2xl relative overflow-hidden shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  Trainer Registrations Awaiting Admin Confirmation
+                  <Badge variant="amber" className="text-[10px] py-0 px-2 font-mono">
+                    {pendingTrainers.length} PENDING
+                  </Badge>
+                </h3>
+                <p className="text-[11px] text-amber-200/80">
+                  Confirm coach registrations so they can access their dashboard, manage bookings, and train athletes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {pendingTrainers.map((pt) => (
+              <div
+                key={pt.id}
+                className="p-4 rounded-xl bg-slate-900/90 border border-amber-500/30 flex flex-col justify-between gap-3 shadow-md"
+              >
+                <div className="flex items-start gap-3">
+                  <img
+                    src={
+                      pt.user?.avatarUrl ||
+                      `https://api.dicebear.com/7.x/avataaars/svg?seed=${pt.user?.firstName || "Coach"}`
+                    }
+                    alt=""
+                    className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-bold text-white truncate">
+                        Coach {pt.user?.firstName} {pt.user?.lastName}
+                      </h4>
+                      <Badge variant="amber" className="text-[10px] shrink-0 font-mono">
+                        Awaiting Confirmation
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-emerald-400 font-semibold">{pt.specialization}</div>
+                    <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <span>✉️ {pt.user?.email}</span>
+                      {pt.user?.phone && <span>📞 {pt.user.phone}</span>}
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-1.5 font-mono">
+                      Rate: <strong className="text-emerald-400 font-bold">₱{Number(pt.hourlyRate).toFixed(2)}/hr</strong> • Exp: <strong>{pt.experienceYears} yrs</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setTrainerToDelete(pt)}
+                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Decline</span>
+                  </button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleApproveTrainer(pt)}
+                    disabled={approvingId === pt.id}
+                    leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
+                    className="font-bold text-xs bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-950/40"
+                  >
+                    {approvingId === pt.id ? "Confirming..." : "Confirm Registration"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Status Filter Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => setStatusTab("all")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            statusTab === "all"
+              ? "bg-slate-800 text-white"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          All Coaches ({trainers.length})
+        </button>
+        <button
+          onClick={() => setStatusTab("active")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            statusTab === "active"
+              ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Active Coaches ({activeTrainers.length})
+        </button>
+        <button
+          onClick={() => setStatusTab("pending")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+            statusTab === "pending"
+              ? "bg-amber-950/80 text-amber-300 border border-amber-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span>Pending Approvals</span>
+          {pendingTrainers.length > 0 && (
+            <Badge variant="amber" className="text-[10px] py-0 px-1.5 font-mono">
+              {pendingTrainers.length}
+            </Badge>
+          )}
+        </button>
       </div>
 
       {/* Search & Filter Toolbar */}
@@ -348,9 +521,15 @@ export default function AdminTrainersPage() {
                         {t.specialization}
                       </div>
                     </div>
-                    <Badge variant="emerald" className="text-[10px] py-0.5 px-2">
-                      Active
-                    </Badge>
+                    {t.user?.status === "pending" ? (
+                      <Badge variant="amber" className="text-[10px] py-0.5 px-2 font-mono">
+                        Pending Confirmation
+                      </Badge>
+                    ) : (
+                      <Badge variant="emerald" className="text-[10px] py-0.5 px-2">
+                        Active
+                      </Badge>
+                    )}
                   </div>
 
                   <p className="text-xs text-slate-400 mt-2.5 mb-4 line-clamp-2 leading-relaxed">
@@ -392,19 +571,33 @@ export default function AdminTrainersPage() {
               </div>
 
               {/* Card Footer Actions */}
-              <div className="p-4 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between">
+              <div className="p-4 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-2">
                 <span className="text-[10px] text-slate-500 font-mono">
                   ID: {t.id.slice(0, 8)}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => setTrainerToDelete(t)}
-                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Trainer</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTrainerToDelete(t)}
+                    className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{t.user?.status === "pending" ? "Decline" : "Delete Trainer"}</span>
+                  </button>
+
+                  {t.user?.status === "pending" && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleApproveTrainer(t)}
+                      disabled={approvingId === t.id}
+                      leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
+                      className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 shadow-sm"
+                    >
+                      {approvingId === t.id ? "Confirming..." : "Confirm"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </Card>
           ))}

@@ -11,7 +11,7 @@ interface JwtPayload {
   lastName: string;
   memberId?: string;
   trainerId?: string;
-  status: "active" | "suspended" | "inactive";
+  status: "active" | "suspended" | "inactive" | "pending";
 }
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {

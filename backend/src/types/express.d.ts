@@ -11,7 +11,7 @@ declare global {
         lastName: string;
         memberId?: string;
         trainerId?: string;
-        status: "active" | "suspended" | "inactive";
+        status: AccountStatus | "pending";
       };
     }
   }

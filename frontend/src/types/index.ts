@@ -1,5 +1,5 @@
 export type UserRole = "super_admin" | "admin" | "trainer" | "member";
-export type AccountStatus = "active" | "suspended" | "inactive";
+export type AccountStatus = "active" | "suspended" | "inactive" | "pending";
 export type MembershipStatus = "active" | "expired" | "frozen" | "cancelled" | "pending";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
 export type PaymentStatus = "unpaid" | "pending" | "completed" | "failed" | "refunded";
