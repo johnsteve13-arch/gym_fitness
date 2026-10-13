@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { GymClass } from "@/types";
 import { Card } from "@/components/ui/Card";
@@ -9,10 +10,15 @@ import { Badge } from "@/components/ui/Badge";
 import { Calendar, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react";
 
 export default function MemberClassesPage() {
+  const router = useRouter();
   const [classes, setClasses] = useState<GymClass[]>([]);
   const [bookedClassIds, setBookedClassIds] = useState<string[]>(["class-1"]);
   const [actionSuccess, setActionSuccess] = useState("");
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    router.replace("/member/trainers");
+  }, [router]);
 
   useEffect(() => {
     api.listClasses().then(setClasses);

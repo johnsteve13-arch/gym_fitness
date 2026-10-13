@@ -439,13 +439,13 @@ export default function MemberOverviewPage() {
             </Link>
 
             <Link
-              href="/member/classes"
+              href="/member/ai-coach"
               className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center gap-3"
             >
-              <Calendar className="w-5 h-5 text-amber-400 shrink-0" />
+              <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
               <div>
-                <div className="font-bold text-white">Group Classes</div>
-                <div className="text-[10px] text-slate-400">Join Olympic Clinic</div>
+                <div className="font-bold text-white">AI Fitness Coach</div>
+                <div className="text-[10px] text-slate-400">Personalized Workout Advice</div>
               </div>
             </Link>
           </div>

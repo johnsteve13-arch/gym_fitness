@@ -344,9 +344,9 @@ export default function LandingPage() {
                 DYNAMIC GROUP SESSIONS
               </p>
             </div>
-            <Link href="/member/classes">
+            <Link href="/member/trainers">
               <Button variant="outline" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                View All Sessions
+                Book a Trainer
               </Button>
             </Link>
           </div>

@@ -41,7 +41,6 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
     { label: "Workout Logger", href: "/member/workouts", icon: Dumbbell },
     { label: "Personal Trainers", href: "/member/trainers", icon: UserCheck },
     { label: "Body Composition", href: "/member/measurements", icon: Scale },
-    { label: "Group Classes", href: "/member/classes", icon: Calendar },
     { label: "Rewards Shop", href: "/member/rewards", icon: Gift },
     { label: "AI Fitness Coach", href: "/member/ai-coach", icon: Sparkles },
     { label: "Notifications", href: "/member/notifications", icon: Bell },
