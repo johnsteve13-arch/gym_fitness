@@ -432,11 +432,6 @@ export default function TrainerDashboardPage() {
                 Open Reception Kiosk
               </Button>
             </Link>
-            <Link href="/register?role=member">
-              <Button size="sm" variant="outline">
-                Member Registration
-              </Button>
-            </Link>
             <Link href="/trainer/logout">
               <Button size="sm" variant="danger" leftIcon={<LogOut className="w-4 h-4" />}>
                 Log Out
