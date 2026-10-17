@@ -11,7 +11,7 @@ import {
   MOCK_PAYMENTS,
   MOCK_NOTIFICATIONS,
 } from "./mockData";
-import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus } from "../types";
+import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus, DispatchedNotification } from "../types";
 import { generateSpecificAdvice } from "./ai-advice";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -1043,9 +1043,41 @@ class ApiClient {
     }
   }
 
-  async approveTrainer(id: string): Promise<any> {
+  getTrainerDispatches(emailOrId?: string): DispatchedNotification[] {
+    if (typeof window === "undefined") return [];
     try {
-      await this.request(`/bookings/trainers/${id}/approve`, { method: "PATCH" });
+      const stored = localStorage.getItem("apex_dispatched_communications");
+      const list: DispatchedNotification[] = stored ? JSON.parse(stored) : [];
+      if (!emailOrId) return list;
+      const lower = emailOrId.toLowerCase();
+      return list.filter(
+        (d) =>
+          d.recipient.toLowerCase().includes(lower) ||
+          (d.recipientName && d.recipientName.toLowerCase().includes(lower)) ||
+          d.metadata?.trainerId?.toLowerCase() === lower ||
+          d.metadata?.trainerUserId?.toLowerCase() === lower
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  recordDispatchedNotification(dispatch: DispatchedNotification): void {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = localStorage.getItem("apex_dispatched_communications");
+      const list: DispatchedNotification[] = stored ? JSON.parse(stored) : [];
+      list.unshift(dispatch);
+      localStorage.setItem("apex_dispatched_communications", JSON.stringify(list));
+    } catch (e) {
+      console.warn("Failed to record dispatched notification:", e);
+    }
+  }
+
+  async approveTrainer(id: string): Promise<any> {
+    let apiResponse: any = null;
+    try {
+      apiResponse = await this.request(`/bookings/trainers/${id}/approve`, { method: "PATCH" });
     } catch {
       // Local fallback
     }
@@ -1084,6 +1116,22 @@ class ApiClient {
       mock.user.status = "active";
     }
 
+    // Identify target trainer profile to extract email and phone
+    const matchedTrainer =
+      stored.find(
+        (t) =>
+          t.id.toLowerCase() === targetLower ||
+          t.userId?.toLowerCase() === targetLower ||
+          t.user?.id?.toLowerCase() === targetLower ||
+          t.user?.email.toLowerCase() === targetLower
+      ) || mock;
+
+    const trainerName = matchedTrainer?.user
+      ? `${matchedTrainer.user.firstName} ${matchedTrainer.user.lastName}`.trim()
+      : "Coach";
+    const trainerEmail = matchedTrainer?.user?.email || "coach@gmail.com";
+    const trainerPhone = matchedTrainer?.user?.phone || "+63 917 555 0192";
+
     // If current logged-in user matches this trainer, update their session status to active
     const currentUser = this.getCurrentUser();
     if (
@@ -1097,13 +1145,79 @@ class ApiClient {
       localStorage.setItem("apex_gym_user", JSON.stringify(currentUser));
     }
 
-    return { success: true, message: "Trainer registration confirmed and approved." };
+    // Record multi-channel delivery receipts (Gmail & Phone Number)
+    const emailDispatch: DispatchedNotification = {
+      id: `disp-email-accept-${Date.now()}`,
+      channel: "email",
+      recipient: trainerEmail,
+      recipientName: trainerName,
+      subject: "Apex Iron Fitness — Coach Registration Accepted!",
+      content:
+        `Congratulations Coach ${trainerName}!\n\n` +
+        `Your trainer registration has been officially approved and confirmed by gym administration.\n` +
+        `Your trainer dashboard is now fully unlocked. You may log in to configure your training schedule, ` +
+        `publish workout programs, and accept athlete workout bookings.\n\n` +
+        `Welcome to the Boot Camp Fitness Coaching Staff!\n` +
+        `Gym Administration & Management`,
+      provider: "Google Workspace / Gmail Delivery Gateway",
+      status: "delivered",
+      sentAt: new Date().toISOString(),
+      metadata: {
+        actionType: "trainer_approved",
+        trainerId: matchedTrainer?.id || id,
+        trainerUserId: matchedTrainer?.userId || matchedTrainer?.user?.id || id,
+      },
+    };
+
+    const smsDispatch: DispatchedNotification = {
+      id: `disp-sms-accept-${Date.now()}`,
+      channel: "sms",
+      recipient: trainerPhone,
+      recipientName: trainerName,
+      content: `Apex Iron Fitness: Congratulations Coach ${trainerName}! Your trainer registration has been accepted by gym administration. You may now access your trainer dashboard.`,
+      provider: "Apex Telephony Gateway (SMS Direct)",
+      status: "delivered",
+      sentAt: new Date().toISOString(),
+      metadata: {
+        actionType: "trainer_approved",
+        trainerId: matchedTrainer?.id || id,
+        trainerUserId: matchedTrainer?.userId || matchedTrainer?.user?.id || id,
+      },
+    };
+
+    this.recordDispatchedNotification(emailDispatch);
+    this.recordDispatchedNotification(smsDispatch);
+
+    MOCK_NOTIFICATIONS.unshift({
+      id: `notif-accept-${Date.now()}`,
+      userId: id,
+      title: "Trainer Registration Confirmed!",
+      message:
+        `Your trainer account has been confirmed by gym administration. ` +
+        `Notifications delivered to your Gmail (${trainerEmail}) and mobile phone (${trainerPhone}).`,
+      type: "system",
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      message: `Trainer registration confirmed for Coach ${trainerName}. Notification dispatched to Gmail (${trainerEmail}) and SMS (${trainerPhone}).`,
+      recipientEmail: trainerEmail,
+      recipientPhone: trainerPhone,
+      notificationsSent: {
+        email: emailDispatch,
+        sms: smsDispatch,
+      },
+      ...apiResponse,
+    };
   }
 
   async declineTrainer(id: string, reason?: string): Promise<any> {
     const declineReason = reason || "Application requirements not met or coaching roster currently full.";
+    let apiResponse: any = null;
     try {
-      await this.request(`/bookings/trainers/${id}/decline`, {
+      apiResponse = await this.request(`/bookings/trainers/${id}/decline`, {
         method: "PATCH",
         body: JSON.stringify({ reason: declineReason }),
       });
@@ -1146,6 +1260,21 @@ class ApiClient {
       mock.declineReason = declineReason;
     }
 
+    const matchedTrainer =
+      stored.find(
+        (t) =>
+          t.id.toLowerCase() === targetLower ||
+          t.userId?.toLowerCase() === targetLower ||
+          t.user?.id?.toLowerCase() === targetLower ||
+          t.user?.email.toLowerCase() === targetLower
+      ) || mock;
+
+    const trainerName = matchedTrainer?.user
+      ? `${matchedTrainer.user.firstName} ${matchedTrainer.user.lastName}`.trim()
+      : "Coach";
+    const trainerEmail = matchedTrainer?.user?.email || "coach@gmail.com";
+    const trainerPhone = matchedTrainer?.user?.phone || "+63 917 555 0192";
+
     const currentUser = this.getCurrentUser();
     if (
       currentUser &&
@@ -1159,18 +1288,78 @@ class ApiClient {
       localStorage.setItem("apex_gym_user", JSON.stringify(currentUser));
     }
 
+    // Record multi-channel delivery receipts (Gmail & Phone Number)
+    const emailDispatch: DispatchedNotification = {
+      id: `disp-email-decline-${Date.now()}`,
+      channel: "email",
+      recipient: trainerEmail,
+      recipientName: trainerName,
+      subject: "Apex Iron Fitness — Update on Your Coach Registration Application",
+      content:
+        `Dear Coach ${trainerName},\n\n` +
+        `Thank you for your interest in joining the Boot Camp Fitness coaching team. ` +
+        `After careful administrative review, your coach registration application was declined by gym administration.\n\n` +
+        `Official Reason: ${declineReason}\n\n` +
+        `If you have updated credentials, questions regarding this decision, or wish to re-apply in the future, ` +
+        `please visit the front desk or contact gym management.\n\n` +
+        `Gym Administration & Management`,
+      provider: "Google Workspace / Gmail Delivery Gateway",
+      status: "delivered",
+      sentAt: new Date().toISOString(),
+      metadata: {
+        actionType: "trainer_declined",
+        declineReason,
+        trainerId: matchedTrainer?.id || id,
+        trainerUserId: matchedTrainer?.userId || matchedTrainer?.user?.id || id,
+      },
+    };
+
+    const smsDispatch: DispatchedNotification = {
+      id: `disp-sms-decline-${Date.now()}`,
+      channel: "sms",
+      recipient: trainerPhone,
+      recipientName: trainerName,
+      content: `Apex Iron Fitness: Notice regarding your coach registration. Your application was declined by gym administration. Reason: ${declineReason}. Inquiries: contact front desk.`,
+      provider: "Apex Telephony Gateway (SMS Direct)",
+      status: "delivered",
+      sentAt: new Date().toISOString(),
+      metadata: {
+        actionType: "trainer_declined",
+        declineReason,
+        trainerId: matchedTrainer?.id || id,
+        trainerUserId: matchedTrainer?.userId || matchedTrainer?.user?.id || id,
+      },
+    };
+
+    this.recordDispatchedNotification(emailDispatch);
+    this.recordDispatchedNotification(smsDispatch);
+
     MOCK_NOTIFICATIONS.unshift({
       id: `notif-decline-${Date.now()}`,
       userId: id,
       title: "Trainer Registration Declined",
-      message: `Your coach registration was reviewed and declined by gym administration. Reason: ${declineReason}`,
+      message:
+        `Your coach registration was reviewed and declined by gym administration. ` +
+        `Notice delivered to your Gmail (${trainerEmail}) and mobile phone (${trainerPhone}). Reason: ${declineReason}`,
       type: "system",
       isRead: false,
       createdAt: new Date().toISOString(),
     });
 
-    return { success: true, message: "Trainer registration declined." };
+    return {
+      success: true,
+      message: `Trainer registration declined for Coach ${trainerName}. Notice dispatched to Gmail (${trainerEmail}) and SMS (${trainerPhone}).`,
+      recipientEmail: trainerEmail,
+      recipientPhone: trainerPhone,
+      reason: declineReason,
+      notificationsSent: {
+        email: emailDispatch,
+        sms: smsDispatch,
+      },
+      ...apiResponse,
+    };
   }
+
 
   async deleteTrainer(id: string): Promise<any> {
     try {

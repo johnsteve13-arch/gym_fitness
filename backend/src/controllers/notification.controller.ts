@@ -44,4 +44,15 @@ export class NotificationController {
       return sendError(res, err.message, 500);
     }
   }
+
+  static async listDispatches(req: Request, res: Response, next: NextFunction) {
+    try {
+      const filter = (req.query.filter as string) || (req.query.recipient as string) || undefined;
+      const data = NotificationService.listDispatches(filter);
+      return sendSuccess(res, data);
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
 }
+

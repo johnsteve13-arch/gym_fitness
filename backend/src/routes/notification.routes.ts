@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get("/", NotificationController.list);
+router.get("/dispatches", NotificationController.listDispatches);
 router.patch("/:id/read", NotificationController.markAsRead);
 router.patch("/read-all", NotificationController.markAllAsRead);
 router.post("/broadcast", isStaffOrAdmin, NotificationController.broadcast);

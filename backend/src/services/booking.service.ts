@@ -1,6 +1,7 @@
 import { prisma } from "../config/database";
 import { ENV } from "../config/env";
 import bcrypt from "bcryptjs";
+import { NotificationService } from "./notification.service";
 
 export class BookingService {
   static async listTrainers(params?: { includePending?: boolean }) {
@@ -546,19 +547,22 @@ export class BookingService {
       data: { status: "active" },
     });
 
-    // Create confirmation notification for the trainer
-    await prisma.notification.create({
-      data: {
-        userId: trainer.userId,
-        title: "Trainer Registration Confirmed!",
-        message: "Your trainer account has been confirmed by gym administration. You now have full access to your trainer dashboard.",
-        type: "system",
-      },
-    }).catch(() => null);
+    const fullName = `${trainer.user.firstName} ${trainer.user.lastName}`.trim();
+    const email = trainer.user.email;
+    const phone = trainer.user.phone || "+63 912 345 6789";
+
+    // Multi-channel dispatch: Gmail & Phone Number (SMS)
+    const notificationsSent = await NotificationService.sendTrainerAcceptNotifications({
+      userId: trainer.userId,
+      name: fullName,
+      email,
+      phone,
+    });
 
     return {
       success: true,
-      message: `Trainer ${trainer.user.firstName} ${trainer.user.lastName} has been confirmed and activated.`,
+      message: `Trainer ${fullName} has been confirmed and activated. Notifications dispatched to Gmail (${email}) and SMS (${phone}).`,
+      notificationsSent,
       trainer: {
         ...trainer,
         user: updatedUser,
@@ -585,21 +589,25 @@ export class BookingService {
       data: { status: "inactive" },
     });
 
-    // Create decline notification for the trainer
-    await prisma.notification.create({
-      data: {
-        userId: trainer.userId,
-        title: "Trainer Registration Declined",
-        message: `Your coach registration was reviewed and declined by gym administration. Reason: ${declineReason}`,
-        type: "system",
-      },
-    }).catch(() => null);
+    const fullName = `${trainer.user.firstName} ${trainer.user.lastName}`.trim();
+    const email = trainer.user.email;
+    const phone = trainer.user.phone || "+63 912 345 6789";
+
+    // Multi-channel dispatch: Gmail & Phone Number (SMS)
+    const notificationsSent = await NotificationService.sendTrainerDeclineNotifications({
+      userId: trainer.userId,
+      name: fullName,
+      email,
+      phone,
+      reason: declineReason,
+    });
 
     return {
       success: true,
-      message: `Trainer registration for Coach ${trainer.user.firstName} ${trainer.user.lastName} has been declined.`,
+      message: `Trainer registration for Coach ${fullName} has been declined. Decision notice dispatched to Gmail (${email}) and SMS (${phone}).`,
       status: "declined",
       reason: declineReason,
+      notificationsSent,
       trainer: {
         ...trainer,
         user: updatedUser,

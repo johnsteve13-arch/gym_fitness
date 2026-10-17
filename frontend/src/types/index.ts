@@ -242,6 +242,24 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface DispatchedNotification {
+  id: string;
+  channel: "email" | "sms";
+  recipient: string; // Email or phone number
+  recipientName?: string;
+  subject?: string; // For email
+  content: string;
+  provider: string; // e.g. "Gmail Delivery Gateway" | "Mobile SMS Telephony"
+  status: "delivered" | "sent";
+  sentAt: string;
+  metadata?: {
+    actionType: "trainer_approved" | "trainer_declined";
+    declineReason?: string;
+    trainerId?: string;
+    trainerUserId?: string;
+  };
+}
+
 export interface AiActivityScore {
   id: string;
   score: number;
