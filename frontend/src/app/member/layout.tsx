@@ -20,6 +20,7 @@ import {
   UserCheck,
   ArrowRight,
   ShieldCheck,
+  Award,
 } from "lucide-react";
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
@@ -27,6 +28,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authorized, setAuthorized] = useState(false);
+  const [coins, setCoins] = useState<number>(50);
 
   useEffect(() => {
     const user = api.getCurrentUser();
@@ -34,7 +36,13 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     } else {
       setAuthorized(true);
+      setCoins(api.getMemberCoins());
     }
+
+    const interval = setInterval(() => {
+      setCoins(api.getMemberCoins());
+    }, 2000);
+    return () => clearInterval(interval);
   }, [pathname, router]);
 
   const navItems = [
@@ -105,7 +113,16 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
             })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/member/rewards"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition shadow-sm"
+              title="Reward Coins - Earn 50 on registration + 15 coins for every gym check-in!"
+            >
+              <Award className="w-3.5 h-3.5 text-amber-400" />
+              <span>{coins} Coins</span>
+            </Link>
+
             <button
               onClick={handleLogout}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-red-400 hover:bg-slate-900 transition"
@@ -126,6 +143,13 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-slate-800 bg-slate-950 px-4 py-3 space-y-1">
+            <div className="px-3 py-2 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs">
+              <span className="text-slate-300 font-medium">Reward Coins:</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1">
+                <Award className="w-3.5 h-3.5" />
+                {coins} Coins
+              </span>
+            </div>
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;

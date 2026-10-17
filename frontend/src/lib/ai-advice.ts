@@ -10,7 +10,7 @@ export function generateSpecificAdvice(
   goals: string = "Hypertrophy and Athletic Conditioning",
   bmi: number | null = 24.2,
   focusArea?: string,
-  rewardCoins: number = 450
+  rewardCoins: number = 50
 ): string {
   const q = (userQuery || "").toLowerCase().trim();
 

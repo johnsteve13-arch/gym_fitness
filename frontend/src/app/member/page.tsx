@@ -33,7 +33,7 @@ export default function MemberOverviewPage() {
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [isQuickBookOpen, setIsQuickBookOpen] = useState(false);
   const [actionSuccess, setActionSuccess] = useState("");
-  const [coinBalance, setCoinBalance] = useState<number>(450);
+  const [coinBalance, setCoinBalance] = useState<number>(50);
   const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
   // Quick Book Form State
@@ -55,8 +55,13 @@ export default function MemberOverviewPage() {
     const memberId = memberRecord?.id || (user as any)?.member?.id || user?.id || "";
 
     api.getMember(memberId).then((res) => {
-      if (res) setMember(res);
-      else if (memberRecord) setMember(memberRecord);
+      if (res) {
+        setMember(res);
+        if (res.rewardCoins !== undefined) setCoinBalance(res.rewardCoins);
+      } else if (memberRecord) {
+        setMember(memberRecord);
+        if (memberRecord.rewardCoins !== undefined) setCoinBalance(memberRecord.rewardCoins);
+      }
     });
 
     api.listBookings({ memberId }).then((b) => {

@@ -33,7 +33,7 @@ export default function MemberWorkoutsPage() {
   const [isTrainerModalOpen, setIsTrainerModalOpen] = useState(false);
   const [actionSuccess, setActionSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [coinBalance, setCoinBalance] = useState<number>(450);
+  const [coinBalance, setCoinBalance] = useState<number>(50);
   const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
   // Form state for Workout Logging

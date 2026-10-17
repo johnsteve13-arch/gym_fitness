@@ -261,6 +261,13 @@ function RegisterForm() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-start gap-2.5">
+                  <Award className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  <span>
+                    <strong className="text-white">Registration Welcome Reward:</strong> Gain <strong className="text-emerald-300 font-bold">50 Coins</strong> immediately upon registration, plus earn reward coins on every gym attendance check-in (+15 coins)!
+                  </span>
+                </div>
               </>
             )}
 

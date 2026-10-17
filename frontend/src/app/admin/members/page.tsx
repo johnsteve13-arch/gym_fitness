@@ -67,7 +67,7 @@ export default function AdminMembersPage() {
       setMembers([newMember, ...members]);
       setIsAddModalOpen(false);
       setFormData({ firstName: "", lastName: "", email: "", phone: "", planId: "", fitnessGoals: "General Conditioning" });
-      setActionSuccess("Member registered successfully with 100 bonus reward coins!");
+      setActionSuccess("Member registered successfully with 50 bonus reward coins!");
       setTimeout(() => setActionSuccess(""), 4000);
     } catch (err: any) {
       alert(err.message || "Failed to add member.");

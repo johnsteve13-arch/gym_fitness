@@ -37,7 +37,7 @@ export default function MemberTrainersPage() {
   const [specialtyFilter, setSpecialtyFilter] = useState("all");
 
   // Coin & Payment State
-  const [coinBalance, setCoinBalance] = useState<number>(450);
+  const [coinBalance, setCoinBalance] = useState<number>(50);
   const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
   // Booking Form State

@@ -11,7 +11,7 @@ import { Gift, Award, CheckCircle, Sparkles, Clock, ArrowRight, UserCheck } from
 
 export default function MemberRewardsPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
-  const [coinBalance, setCoinBalance] = useState(450);
+  const [coinBalance, setCoinBalance] = useState(50);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState("");
 
@@ -56,7 +56,7 @@ export default function MemberRewardsPage() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Perks & Rewards Store</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Earn coins for every gym check-in (+15), completed workout (+20), and personal record (+25).
+            Earn 50 coins immediately upon registration, plus coins for every gym check-in (+15), completed workout (+20), and personal record (+25).
           </p>
         </div>
 

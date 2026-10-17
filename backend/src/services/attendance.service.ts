@@ -156,6 +156,16 @@ export class AttendanceService {
       },
     });
 
+    // Notify member of coins earned on attendance
+    await prisma.notification.create({
+      data: {
+        userId: member.userId,
+        title: "Attendance Bonus (+15 Coins)",
+        message: `Welcome to the gym, ${member.user.firstName}! You earned 15 reward coins for checking in. New balance: ${member.rewardCoins + 15} coins.`,
+        type: "reward",
+      },
+    }).catch(() => {});
+
     const daysRemaining = Math.max(
       0,
       Math.ceil((new Date(activeMembership.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))

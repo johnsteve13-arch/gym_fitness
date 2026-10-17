@@ -330,7 +330,7 @@ class ApiClient {
         gender: "other",
         emergencyContactName: "Self-Registered Athlete",
         emergencyContactPhone: body.phone || "+63 (900) 000-0000",
-        rewardCoins: 100,
+        rewardCoins: 50,
         fitnessGoals: body.fitnessGoals || "Athletic Conditioning and Hypertrophy",
         user: {
           id: result.user.id,
@@ -358,6 +358,7 @@ class ApiClient {
       };
 
       this.saveStoredMember(memberRecord);
+      this.setMemberCoins(50, memberRecord.id);
       MOCK_MEMBERS.unshift(memberRecord);
     } else if (role === "trainer") {
       const trainerRecord: Trainer = {
@@ -487,7 +488,7 @@ class ApiClient {
         memberCode: `MEM-${Math.floor(10000 + Math.random() * 90000)}`,
         qrCodeToken: `APEX-MEM-${Date.now()}`,
         fitnessGoals: body.fitnessGoals || "General Athletic Fitness",
-        rewardCoins: 100,
+        rewardCoins: 50,
         user: {
           id: `user-${Date.now()}`,
           email: body.email,
@@ -512,6 +513,7 @@ class ApiClient {
       };
       MOCK_MEMBERS.unshift(newMember);
       this.saveStoredMember(newMember);
+      this.setMemberCoins(50, newMember.id);
       return newMember;
     }
   }
@@ -748,10 +750,14 @@ class ApiClient {
   // ATTENDANCE & KIOSK
   async verifyAndCheckIn(identifier: string, method: string = "qr"): Promise<any> {
     try {
-      return await this.request("/attendance/check-in", {
+      const res = await this.request<any>("/attendance/check-in", {
         method: "POST",
         body: JSON.stringify({ identifier, method }),
       });
+      if (res?.accessGranted && res?.member?.rewardCoins !== undefined) {
+        this.setMemberCoins(res.member.rewardCoins, res.member.id);
+      }
+      return res;
     } catch {
       // Offline / client fallback check-in logic
       const stored = this.getStoredMembers();
@@ -778,14 +784,27 @@ class ApiClient {
         member,
       };
       MOCK_ATTENDANCES.unshift(newAtt);
-      member.rewardCoins = (member.rewardCoins || 0) + 15;
+      const updatedCoins = (member.rewardCoins || 0) + 15;
+      member.rewardCoins = updatedCoins;
+      this.setMemberCoins(updatedCoins, member.id);
       if (stored.length > 0) {
         localStorage.setItem("apex_registered_members", JSON.stringify(stored));
       }
 
+      // Add notification for attendance bonus coins
+      MOCK_NOTIFICATIONS.unshift({
+        id: `notif-att-${Date.now()}`,
+        userId: member.userId,
+        title: "Attendance Bonus (+15 Coins)",
+        message: `Welcome to the gym, ${member.user?.firstName}! You earned 15 reward coins for checking in today. Updated balance: ${updatedCoins} coins.`,
+        type: "reward",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+
       return {
         accessGranted: true,
-        message: `Welcome, ${member.user?.firstName}! Access verified.`,
+        message: `Welcome, ${member.user?.firstName}! Access verified. +15 Attendance Coins awarded.`,
         attendance: newAtt,
         member: {
           id: member.id,
@@ -794,7 +813,7 @@ class ApiClient {
           avatarUrl: member.user?.avatarUrl,
           planName: member.memberships?.[0]?.plan?.name || "Active Membership",
           daysRemaining: 30,
-          rewardCoins: member.rewardCoins,
+          rewardCoins: updatedCoins,
         },
       };
     }
@@ -1100,7 +1119,7 @@ class ApiClient {
   }
 
   getMemberCoins(memberId?: string): number {
-    if (typeof window === "undefined") return 450;
+    if (typeof window === "undefined") return 50;
     try {
       const customVal = localStorage.getItem("apex_member_coins");
       if (customVal !== null && !isNaN(parseInt(customVal, 10))) {
@@ -1117,9 +1136,9 @@ class ApiClient {
       if (m && m.rewardCoins !== undefined) {
         return m.rewardCoins;
       }
-      return 450;
+      return 50;
     } catch {
-      return 450;
+      return 50;
     }
   }
 

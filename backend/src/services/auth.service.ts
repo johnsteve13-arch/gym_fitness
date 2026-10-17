@@ -56,7 +56,7 @@ export class AuthService {
           memberCode,
           qrCodeToken,
           fitnessGoals: data.fitnessGoals || "General Health and Fitness",
-          rewardCoins: 100, // 100 bonus welcome coins
+          rewardCoins: 50, // 50 bonus welcome coins on registration
         },
       });
 
@@ -88,9 +88,9 @@ export class AuthService {
       await prisma.rewardTransaction.create({
         data: {
           memberId: member.id,
-          points: 100,
+          points: 50,
           transactionType: "earned",
-          reason: "Welcome bonus for joining Apex Iron Fitness",
+          reason: "Welcome bonus for joining Apex Iron Fitness (50 coins)",
         },
       });
 
@@ -99,7 +99,7 @@ export class AuthService {
         data: {
           userId: user.id,
           title: "Welcome to Apex Iron Fitness!",
-          message: "Your membership profile has been created with 100 bonus reward coins. Check your QR code to enter the gym!",
+          message: "Your membership profile has been created with 50 bonus reward coins. Check your QR code to enter the gym and earn coins on every attendance!",
           type: "system",
         },
       });

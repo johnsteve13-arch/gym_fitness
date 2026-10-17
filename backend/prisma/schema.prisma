@@ -115,7 +115,7 @@ model Member {
   emergencyContactPhone String?      @map("emergency_contact_phone")
   address              String?
   fitnessGoals         String?       @map("fitness_goals") @db.Text
-  rewardCoins          Int           @default(100) @map("reward_coins")
+  rewardCoins          Int           @default(50) @map("reward_coins")
   notes                String?       @db.Text
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")

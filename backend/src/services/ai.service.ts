@@ -597,7 +597,7 @@ Soreness peaks 24 to 48 hours following novel eccentric load or volume spikes. I
     const latestMeasurement = member?.bodyMeasurements[0];
     const bmi = latestMeasurement ? Number(latestMeasurement.bmi) : null;
     const goals = member?.fitnessGoals || "Hypertrophy, Strength & Conditioning";
-    const rewardCoins = member?.rewardCoins ?? 450;
+    const rewardCoins = member?.rewardCoins ?? 50;
 
     const disclaimer =
       "⚠️ Medical Notice: This AI Fitness Coach provides athletic, lifestyle, and exercise educational guidance based on your gym activity. It does not provide medical diagnosis and does not substitute for licensed physicians, clinical dietitians, or physical therapists.";

@@ -186,7 +186,17 @@ export class MemberService {
         address: data.address || null,
         fitnessGoals: data.fitnessGoals || "General Fitness",
         notes: data.notes || null,
-        rewardCoins: 100,
+        rewardCoins: 50,
+      },
+    });
+
+    // Record welcome bonus transaction
+    await prisma.rewardTransaction.create({
+      data: {
+        memberId: member.id,
+        points: 50,
+        transactionType: "earned",
+        reason: "Welcome bonus for joining Apex Iron Fitness (50 coins)",
       },
     });
 
