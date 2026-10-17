@@ -333,7 +333,7 @@ function RegisterForm() {
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-start gap-2.5">
                   <Clock className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                   <span>
-                    <strong className="text-white">Admin Confirmation Required:</strong> Once registered, gym administration must confirm your coach profile before you can access the trainer dashboard.
+                    <strong className="text-white">Admin Review Required:</strong> Once registered, gym administration will review and accept or decline your coach registration before you can access the trainer dashboard.
                   </span>
                 </div>
               </>

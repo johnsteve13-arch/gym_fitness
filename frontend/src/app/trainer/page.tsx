@@ -65,6 +65,7 @@ export default function TrainerDashboardPage() {
       // Synchronize status if stored trainer has updated status
       if (found.user?.status && found.user.status !== user.status) {
         user.status = found.user.status;
+        user.declineReason = found.declineReason || (found.user as any)?.declineReason;
         setCurrentUser({ ...user });
         api.setSession(api.getToken() || "", user);
       }
@@ -126,15 +127,26 @@ export default function TrainerDashboardPage() {
         setCurrentUser(updated);
         api.setSession(api.getToken() || "", updated);
         setStatusMessageType("success");
-        setStatusMessage("Registration confirmed by administrator! Unlocking your coach dashboard...");
+        setStatusMessage("Registration accepted by administrator! Unlocking your coach dashboard...");
         setTimeout(() => {
           loadData(updated);
         }, 1200);
         return;
       }
 
+      if (match?.user?.status === "declined" || match?.user?.status === "inactive") {
+        const updated = {
+          ...currentUser,
+          status: "declined",
+          declineReason: match.declineReason || (match.user as any)?.declineReason,
+        };
+        setCurrentUser(updated);
+        api.setSession(api.getToken() || "", updated);
+        return;
+      }
+
       setStatusMessageType("info");
-      setStatusMessage("Your trainer registration is currently pending admin confirmation. Please check back shortly or notify your gym administrator.");
+      setStatusMessage("Your trainer registration is currently awaiting admin review (accept or decline). Please check back shortly.");
       setTimeout(() => setStatusMessage(""), 5000);
     } catch (err) {
       setStatusMessageType("info");
@@ -152,6 +164,120 @@ export default function TrainerDashboardPage() {
           <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs text-slate-400">Verifying Coach Access...</p>
         </div>
+      </div>
+    );
+  }
+
+  const isDeclined =
+    currentUser?.status === "declined" ||
+    currentUser?.status === "inactive" ||
+    trainerProfile?.user?.status === "declined" ||
+    trainerProfile?.user?.status === "inactive";
+
+  if (isDeclined) {
+    const declineReason =
+      currentUser?.declineReason ||
+      trainerProfile?.declineReason ||
+      trainerProfile?.user?.declineReason ||
+      "Application requirements not met or coaching roster currently full.";
+
+    return (
+      <div className="min-h-screen bg-[#090D14] text-white">
+        {/* Navigation Bar */}
+        <header className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-red-400 flex items-center justify-center shadow-lg shadow-rose-500/20">
+                <Flame className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-black tracking-tight text-white flex items-center gap-2">
+                  BOOT CAMP FITNESS
+                  <Badge variant="danger" className="text-[10px] py-0 px-2 font-mono">
+                    REGISTRATION DECLINED
+                  </Badge>
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium">
+                  GYM MEMBERSHIP MANAGEMENT SYSTEM • TRAINER PORTAL
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className="text-xs font-bold text-white">
+                  Coach {currentUser?.firstName} {currentUser?.lastName}
+                </div>
+                <div className="text-[10px] text-slate-400">{currentUser?.email}</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  api.logout();
+                  router.push("/login");
+                }}
+                leftIcon={<LogOut className="w-3.5 h-3.5" />}
+              >
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Declined Screen Content */}
+        <main className="max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+          <Card className="glass-card border-rose-500/40 bg-rose-950/20 p-8 sm:p-10 relative overflow-hidden text-center shadow-2xl">
+            <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-rose-500/10">
+              <XCircle className="w-10 h-10" />
+            </div>
+
+            <Badge variant="danger" className="text-xs py-1 px-3 font-bold mb-3 uppercase tracking-wider">
+              Registration Declined by Admin
+            </Badge>
+
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-3">
+              Trainer Application Declined
+            </h1>
+
+            <p className="text-slate-300 text-sm leading-relaxed mb-6 max-w-xl mx-auto">
+              Your registration application to join the coaching staff has been reviewed and declined by gym administration.
+            </p>
+
+            <div className="p-4 rounded-xl bg-slate-950/80 border border-rose-900/50 text-left max-w-xl mx-auto mb-6">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-400 mb-1 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Administrative Notice / Decline Reason</span>
+              </div>
+              <p className="text-xs text-rose-200/90 leading-relaxed font-mono">
+                {declineReason}
+              </p>
+            </div>
+
+            <p className="text-xs text-slate-400 mb-6 max-w-md mx-auto">
+              If you have updated credentials, questions regarding this decision, or would like to submit a new inquiry, please contact gym management or visit the front desk.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  api.logout();
+                  router.push("/login");
+                }}
+                leftIcon={<LogOut className="w-4 h-4" />}
+              >
+                Sign In With Another Account
+              </Button>
+              <Link href="/">
+                <Button size="sm" className="bg-slate-800 hover:bg-slate-700 text-white font-bold">
+                  Return to Website
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </main>
       </div>
     );
   }
@@ -250,7 +376,7 @@ export default function TrainerDashboardPage() {
                 </h1>
 
                 <p className="text-slate-300 text-sm leading-relaxed mb-8">
-                  The gym administrator needs to confirm your trainer registration before you can access your dashboard, build workout programs, and accept member bookings.
+                  The gym administrator needs to accept or decline your trainer registration before you can access your dashboard, build workout programs, and accept member bookings.
                 </p>
 
                 {/* Steps Visualizer */}

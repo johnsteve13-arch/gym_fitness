@@ -177,6 +177,9 @@ export class AuthService {
     }
 
     if (user.status === "inactive") {
+      if (user.role === "trainer") {
+        throw new Error("Registration Declined: Your coach registration was reviewed and declined by gym administration. Please contact the front desk for inquiries.");
+      }
       throw new Error("Account is currently inactive. Please contact support.");
     }
 

@@ -12,6 +12,7 @@ router.use(authenticate);
 
 router.post("/", isStaffOrAdmin, BookingController.createTrainer);
 router.patch("/:id/approve", isStaffOrAdmin, BookingController.approveTrainer);
+router.patch("/:id/decline", isStaffOrAdmin, BookingController.declineTrainer);
 router.delete("/:id", isStaffOrAdmin, BookingController.deleteTrainer);
 
 export default router;

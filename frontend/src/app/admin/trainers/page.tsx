@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   RefreshCw,
+  XCircle,
 } from "lucide-react";
 
 const SPECIALIZATION_PRESETS = [
@@ -48,6 +49,10 @@ export default function AdminTrainersPage() {
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [trainerToDelete, setTrainerToDelete] = useState<Trainer | null>(null);
+  const [trainerToDecline, setTrainerToDecline] = useState<Trainer | null>(null);
+  const [declineReasonPreset, setDeclineReasonPreset] = useState("roster_full");
+  const [customDeclineReason, setCustomDeclineReason] = useState("");
+  const [decliningId, setDecliningId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionSuccess, setActionSuccess] = useState("");
   const [actionError, setActionError] = useState("");
@@ -68,7 +73,7 @@ export default function AdminTrainersPage() {
     password: "Password@123",
   });
 
-  const [statusTab, setStatusTab] = useState<"all" | "active" | "pending" | "conflicts">("all");
+  const [statusTab, setStatusTab] = useState<"all" | "active" | "pending" | "declined" | "conflicts">("all");
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
   // Admin Monitoring: Schedule Conflicts & Declined Attempts
@@ -106,14 +111,48 @@ export default function AdminTrainersPage() {
     try {
       await api.approveTrainer(trainer.id);
       setActionSuccess(
-        `Registration confirmed! Coach ${trainer.user?.firstName} ${trainer.user?.lastName} is now active and can access their trainer dashboard.`
+        `Registration accepted! Coach ${trainer.user?.firstName} ${trainer.user?.lastName} is now active and can access their trainer dashboard.`
       );
       setTimeout(() => setActionSuccess(""), 5000);
       await loadTrainers();
     } catch (err: any) {
-      setActionError(err.message || "Failed to confirm trainer registration.");
+      setActionError(err.message || "Failed to accept trainer registration.");
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const handleDeclineTrainer = async () => {
+    if (!trainerToDecline) return;
+    setDecliningId(trainerToDecline.id);
+    setActionError("");
+
+    const finalReason =
+      declineReasonPreset === "custom"
+        ? customDeclineReason.trim() || "Application declined by gym administration."
+        : declineReasonPreset === "roster_full"
+        ? "Coaching roster is currently at maximum capacity."
+        : declineReasonPreset === "credentials_incomplete"
+        ? "Required coaching certifications or background verification incomplete."
+        : declineReasonPreset === "experience_insufficient"
+        ? "Experience requirements not met for senior coaching staff."
+        : declineReasonPreset === "schedule_incompatible"
+        ? "Requested training hours incompatible with gym operating schedule."
+        : "Application declined by gym administration.";
+
+    try {
+      await api.declineTrainer(trainerToDecline.id, finalReason);
+      setActionSuccess(
+        `Registration declined for Coach ${trainerToDecline.user?.firstName} ${trainerToDecline.user?.lastName}.`
+      );
+      setTrainerToDecline(null);
+      setCustomDeclineReason("");
+      setTimeout(() => setActionSuccess(""), 5000);
+      await loadTrainers();
+    } catch (err: any) {
+      setActionError(err.message || "Failed to decline trainer registration.");
+    } finally {
+      setDecliningId(null);
     }
   };
 
@@ -199,7 +238,8 @@ export default function AdminTrainersPage() {
   };
 
   const pendingTrainers = trainers.filter((t) => t.user?.status === "pending");
-  const activeTrainers = trainers.filter((t) => t.user?.status !== "pending");
+  const activeTrainers = trainers.filter((t) => t.user?.status === "active");
+  const declinedTrainers = trainers.filter((t) => t.user?.status === "declined" || t.user?.status === "inactive");
 
   // Filtered trainers list
   const filteredTrainers = trainers.filter((t) => {
@@ -214,10 +254,14 @@ export default function AdminTrainersPage() {
       spec.toLowerCase().includes(specializationFilter.toLowerCase());
 
     const isPending = t.user?.status === "pending";
+    const isActive = t.user?.status === "active";
+    const isDeclined = t.user?.status === "declined" || t.user?.status === "inactive";
+
     const matchesStatus =
       statusTab === "all" ||
       (statusTab === "pending" && isPending) ||
-      (statusTab === "active" && !isPending);
+      (statusTab === "active" && isActive) ||
+      (statusTab === "declined" && isDeclined);
 
     return matchesSearch && matchesSpec && matchesStatus;
   });
@@ -403,11 +447,15 @@ export default function AdminTrainersPage() {
                 <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setTrainerToDelete(pt)}
-                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+                    onClick={() => {
+                      setTrainerToDecline(pt);
+                      setDeclineReasonPreset("roster_full");
+                      setCustomDeclineReason("");
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Decline</span>
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Decline Registration</span>
                   </button>
                   <Button
                     size="sm"
@@ -416,7 +464,7 @@ export default function AdminTrainersPage() {
                     leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
                     className="font-bold text-xs bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-950/40"
                   >
-                    {approvingId === pt.id ? "Confirming..." : "Confirm Registration"}
+                    {approvingId === pt.id ? "Accepting..." : "Accept Registration"}
                   </Button>
                 </div>
               </div>
@@ -426,7 +474,7 @@ export default function AdminTrainersPage() {
       )}
 
       {/* Status Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
         <button
           onClick={() => setStatusTab("all")}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
@@ -459,6 +507,21 @@ export default function AdminTrainersPage() {
           {pendingTrainers.length > 0 && (
             <Badge variant="amber" className="text-[10px] py-0 px-1.5 font-mono">
               {pendingTrainers.length}
+            </Badge>
+          )}
+        </button>
+        <button
+          onClick={() => setStatusTab("declined")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+            statusTab === "declined"
+              ? "bg-rose-950/80 text-rose-300 border border-rose-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span>Declined Applications</span>
+          {declinedTrainers.length > 0 && (
+            <Badge variant="danger" className="text-[10px] py-0 px-1.5 font-mono">
+              {declinedTrainers.length}
             </Badge>
           )}
         </button>
@@ -682,6 +745,10 @@ export default function AdminTrainersPage() {
                       <Badge variant="amber" className="text-[10px] py-0.5 px-2 font-mono">
                         Pending Confirmation
                       </Badge>
+                    ) : t.user?.status === "declined" || t.user?.status === "inactive" ? (
+                      <Badge variant="danger" className="text-[10px] py-0.5 px-2 font-mono">
+                        Declined
+                      </Badge>
                     ) : (
                       <Badge variant="emerald" className="text-[10px] py-0.5 px-2">
                         Active
@@ -724,6 +791,14 @@ export default function AdminTrainersPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Decline Notice If Applicable */}
+                  {(t.user?.status === "declined" || t.user?.status === "inactive") && (
+                    <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-900/40 text-[11px] text-rose-300 mt-3">
+                      <strong className="text-rose-200">Decline Reason: </strong>
+                      {t.declineReason || "Application declined by administrator."}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -733,26 +808,60 @@ export default function AdminTrainersPage() {
                   ID: {t.id.slice(0, 8)}
                 </span>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTrainerToDelete(t)}
-                    className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{t.user?.status === "pending" ? "Decline" : "Delete Trainer"}</span>
-                  </button>
-
-                  {t.user?.status === "pending" && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleApproveTrainer(t)}
-                      disabled={approvingId === t.id}
-                      leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
-                      className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 shadow-sm"
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {t.user?.status === "pending" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTrainerToDecline(t);
+                          setDeclineReasonPreset("roster_full");
+                          setCustomDeclineReason("");
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Decline</span>
+                      </button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveTrainer(t)}
+                        disabled={approvingId === t.id}
+                        leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
+                        className="text-xs font-bold bg-emerald-600 hover:bg-emerald-500 shadow-sm"
+                      >
+                        {approvingId === t.id ? "Accepting..." : "Accept"}
+                      </Button>
+                    </>
+                  ) : t.user?.status === "declined" || t.user?.status === "inactive" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setTrainerToDelete(t)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 text-xs font-semibold flex items-center gap-1 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveTrainer(t)}
+                        disabled={approvingId === t.id}
+                        leftIcon={<CheckCircle className="w-3.5 h-3.5 text-white" />}
+                        className="text-xs font-bold bg-emerald-700 hover:bg-emerald-600 shadow-sm"
+                      >
+                        {approvingId === t.id ? "Accepting..." : "Reconsider & Accept"}
+                      </Button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setTrainerToDelete(t)}
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
                     >
-                      {approvingId === t.id ? "Confirming..." : "Confirm"}
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Trainer</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -1036,6 +1145,103 @@ export default function AdminTrainersPage() {
                 </>
               )}
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ================= DECLINE TRAINER REGISTRATION MODAL ================= */}
+      <Modal
+        isOpen={!!trainerToDecline}
+        onClose={() => {
+          if (!decliningId) setTrainerToDecline(null);
+        }}
+        title={`Decline Registration: Coach ${trainerToDecline?.user?.firstName} ${trainerToDecline?.user?.lastName}`}
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
+            <img
+              src={
+                trainerToDecline?.user?.avatarUrl ||
+                `https://api.dicebear.com/7.x/avataaars/svg?seed=${trainerToDecline?.user?.firstName || "Coach"}`
+              }
+              alt=""
+              className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0"
+            />
+            <div>
+              <div className="font-bold text-white text-sm">
+                Coach {trainerToDecline?.user?.firstName} {trainerToDecline?.user?.lastName}
+              </div>
+              <div className="text-xs text-emerald-400 font-semibold">{trainerToDecline?.specialization}</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {trainerToDecline?.user?.email} • ₱{Number(trainerToDecline?.hourlyRate || 75).toFixed(2)}/hr
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+            <span>
+              Declining this coach registration will prevent them from accessing the trainer dashboard. The applicant will see this administrative decision and reason upon attempting to sign in.
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              Reason for Declining *
+            </label>
+            <select
+              value={declineReasonPreset}
+              onChange={(e) => setDeclineReasonPreset(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500 transition"
+            >
+              <option value="roster_full">Coaching roster is currently at maximum capacity</option>
+              <option value="credentials_incomplete">Required certifications or credential verification incomplete</option>
+              <option value="experience_insufficient">Experience requirements not met for senior coaching staff</option>
+              <option value="schedule_incompatible">Requested training hours incompatible with gym schedule</option>
+              <option value="custom">Other / Custom Administrative Reason</option>
+            </select>
+          </div>
+
+          {declineReasonPreset === "custom" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Custom Reason / Instructions for Applicant *
+              </label>
+              <textarea
+                rows={3}
+                value={customDeclineReason}
+                onChange={(e) => setCustomDeclineReason(e.target.value)}
+                placeholder="Explain why this trainer registration was declined..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition"
+              />
+            </div>
+          )}
+
+          {actionError && (
+            <div className="p-3 rounded-lg bg-rose-950/80 border border-rose-700 text-rose-300 text-xs">
+              {actionError}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!decliningId}
+              onClick={() => setTrainerToDecline(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!!decliningId || (declineReasonPreset === "custom" && !customDeclineReason.trim())}
+              onClick={handleDeclineTrainer}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-950/40"
+              leftIcon={<XCircle className="w-3.5 h-3.5 text-white" />}
+            >
+              {decliningId ? "Declining..." : "Confirm Decline Registration"}
+            </Button>
           </div>
         </div>
       </Modal>

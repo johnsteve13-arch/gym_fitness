@@ -111,6 +111,18 @@ export class BookingController {
     }
   }
 
+  static async declineTrainer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id;
+      const { reason } = req.body;
+      const result = await BookingService.declineTrainer(id, reason);
+      await recordAuditLog(req, "TRAINER_DECLINED", "trainers", id, { reason });
+      return sendSuccess(res, result, "Trainer registration declined.");
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
+
   static async getTrainerAvailability(req: Request, res: Response, next: NextFunction) {
     try {
       const trainerId = req.params.id;

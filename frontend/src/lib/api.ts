@@ -1100,6 +1100,78 @@ class ApiClient {
     return { success: true, message: "Trainer registration confirmed and approved." };
   }
 
+  async declineTrainer(id: string, reason?: string): Promise<any> {
+    const declineReason = reason || "Application requirements not met or coaching roster currently full.";
+    try {
+      await this.request(`/bookings/trainers/${id}/decline`, {
+        method: "PATCH",
+        body: JSON.stringify({ reason: declineReason }),
+      });
+    } catch {
+      // Local fallback
+    }
+
+    const stored = this.getStoredTrainers();
+    const targetLower = id.toLowerCase();
+    const updated = stored.map((t) => {
+      const match =
+        t.id.toLowerCase() === targetLower ||
+        t.userId?.toLowerCase() === targetLower ||
+        t.user?.id?.toLowerCase() === targetLower ||
+        t.user?.email.toLowerCase() === targetLower;
+      if (match && t.user) {
+        return {
+          ...t,
+          declineReason,
+          user: {
+            ...t.user,
+            status: "declined" as AccountStatus,
+            declineReason,
+          },
+        };
+      }
+      return t;
+    });
+    localStorage.setItem("apex_registered_trainers", JSON.stringify(updated));
+
+    const mock = MOCK_TRAINERS.find(
+      (t) =>
+        t.id.toLowerCase() === targetLower ||
+        t.userId?.toLowerCase() === targetLower ||
+        t.user?.id?.toLowerCase() === targetLower ||
+        t.user?.email.toLowerCase() === targetLower
+    );
+    if (mock && mock.user) {
+      mock.user.status = "declined" as AccountStatus;
+      mock.declineReason = declineReason;
+    }
+
+    const currentUser = this.getCurrentUser();
+    if (
+      currentUser &&
+      (currentUser.id.toLowerCase() === targetLower ||
+        currentUser.email.toLowerCase() === targetLower ||
+        (currentUser as any).trainer?.id?.toLowerCase() === targetLower)
+    ) {
+      currentUser.status = "declined" as AccountStatus;
+      currentUser.declineReason = declineReason;
+      this.currentUser = currentUser;
+      localStorage.setItem("apex_gym_user", JSON.stringify(currentUser));
+    }
+
+    MOCK_NOTIFICATIONS.unshift({
+      id: `notif-decline-${Date.now()}`,
+      userId: id,
+      title: "Trainer Registration Declined",
+      message: `Your coach registration was reviewed and declined by gym administration. Reason: ${declineReason}`,
+      type: "system",
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { success: true, message: "Trainer registration declined." };
+  }
+
   async deleteTrainer(id: string): Promise<any> {
     try {
       await this.request(`/bookings/trainers/${id}`, { method: "DELETE" });

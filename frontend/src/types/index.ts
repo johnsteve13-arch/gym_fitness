@@ -1,5 +1,5 @@
 export type UserRole = "super_admin" | "admin" | "trainer" | "member";
-export type AccountStatus = "active" | "suspended" | "inactive" | "pending";
+export type AccountStatus = "active" | "suspended" | "inactive" | "pending" | "declined";
 export type MembershipStatus = "active" | "expired" | "frozen" | "cancelled" | "pending";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled" | "no_show" | "declined";
 export type PaymentStatus = "unpaid" | "pending" | "completed" | "failed" | "refunded";
@@ -16,6 +16,7 @@ export interface User {
   phone?: string | null;
   avatarUrl?: string | null;
   status: AccountStatus;
+  declineReason?: string | null;
   createdAt?: string;
   member?: Member | null;
   trainer?: Trainer | null;
@@ -49,6 +50,7 @@ export interface Trainer {
   hourlyRate: number | string;
   rating: number | string;
   maxClients: number;
+  declineReason?: string | null;
   createdAt?: string;
   user?: User;
 }

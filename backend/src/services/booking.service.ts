@@ -566,6 +566,47 @@ export class BookingService {
     };
   }
 
+  static async declineTrainer(id: string, reason?: string) {
+    const trainer = await prisma.trainer.findFirst({
+      where: {
+        OR: [{ id }, { userId: id }],
+      },
+      include: { user: true },
+    });
+
+    if (!trainer) {
+      throw new Error("Trainer not found.");
+    }
+
+    const declineReason = reason || "Application requirements not met or coaching roster currently full.";
+
+    const updatedUser = await prisma.user.update({
+      where: { id: trainer.userId },
+      data: { status: "inactive" },
+    });
+
+    // Create decline notification for the trainer
+    await prisma.notification.create({
+      data: {
+        userId: trainer.userId,
+        title: "Trainer Registration Declined",
+        message: `Your coach registration was reviewed and declined by gym administration. Reason: ${declineReason}`,
+        type: "system",
+      },
+    }).catch(() => null);
+
+    return {
+      success: true,
+      message: `Trainer registration for Coach ${trainer.user.firstName} ${trainer.user.lastName} has been declined.`,
+      status: "declined",
+      reason: declineReason,
+      trainer: {
+        ...trainer,
+        user: updatedUser,
+      },
+    };
+  }
+
   static async getTrainerAvailability(params: {
     trainerId: string;
     sessionDate: string; // "YYYY-MM-DD"
