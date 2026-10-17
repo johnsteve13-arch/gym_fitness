@@ -29,6 +29,8 @@ import {
   Lock,
   RefreshCw,
   Zap,
+  Timer,
+  LogIn,
 } from "lucide-react";
 
 export default function MemberTrainersPage() {
@@ -40,9 +42,10 @@ export default function MemberTrainersPage() {
   const [coinBalance, setCoinBalance] = useState<number>(50);
   const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
-  // Booking Form State
+  // Booking Form State (Customizable Time From and Time Until)
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState("10:00");
+  const [endTime, setEndTime] = useState("11:00");
   const [targetWorkout, setTargetWorkout] = useState("Push & Shoulder Hypertrophy");
   const [sessionType, setSessionType] = useState("Hypertrophy & Progressive Overload");
   const [notes, setNotes] = useState("");
@@ -130,16 +133,21 @@ export default function MemberTrainersPage() {
     e.preventDefault();
     if (!selectedTrainer) return;
 
-    const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate);
+    if (endTime <= startTime) {
+      alert("Invalid session duration: 'Time Until' must be later than 'Time From'.");
+      return;
+    }
+
+    const durationHours = api.calculateDurationHours(startTime, endTime);
+    const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate, durationHours);
+    const calculatedPrice = Math.round(Number(selectedTrainer.hourlyRate) * durationHours);
+
     if (paymentMethod === "coins" && coinBalance < coinsCost) {
-      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this private session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
+      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this ${durationHours}-hour private session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
       return;
     }
 
     setSubmitting(true);
-    const [hours, minutes] = startTime.split(":");
-    const endHour = ((parseInt(hours, 10) + 1) % 24).toString().padStart(2, "0");
-    const endTime = `${endHour}:${minutes || "00"}`;
 
     try {
       const currentUser = api.getCurrentUser();
@@ -169,7 +177,7 @@ export default function MemberTrainersPage() {
         endTime,
         sessionType: finalWorkoutType,
         notes: combinedNotes,
-        price: selectedTrainer.hourlyRate,
+        price: calculatedPrice,
         paymentMethod,
         coinsPaid: paymentMethod === "coins" ? coinsCost : undefined,
       });
@@ -179,11 +187,11 @@ export default function MemberTrainersPage() {
 
       if (paymentMethod === "coins") {
         setActionSuccess(
-          `Personal Trainer booked! Successfully redeemed ${coinsCost} coins for Coach ${selectedTrainer.user?.firstName}. Remaining balance: ${updatedCoins} coins.`
+          `Personal Trainer booked! Successfully redeemed ${coinsCost} coins for Coach ${selectedTrainer.user?.firstName} (${durationHours} hrs, ${startTime} - ${endTime}). Remaining balance: ${updatedCoins} coins.`
         );
       } else {
         setActionSuccess(
-          `Personal Trainer booked! Coach ${selectedTrainer.user?.firstName} reserved for your "${targetWorkout}" workout on ${sessionDate} at ${startTime} (₱${Number(selectedTrainer.hourlyRate).toFixed(2)} PHP)!`
+          `Personal Trainer booked! Coach ${selectedTrainer.user?.firstName} reserved for ${durationHours} hrs (${startTime} - ${endTime}) on ${sessionDate} (₱${calculatedPrice.toFixed(2)} PHP)!`
         );
       }
 
@@ -526,8 +534,11 @@ export default function MemberTrainersPage() {
 
       {/* BOOK TRAINER MODAL */}
       {selectedTrainer && (() => {
-        const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate);
+        const durationHours = api.calculateDurationHours(startTime, endTime);
+        const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate, durationHours);
+        const calculatedPrice = Math.round(Number(selectedTrainer.hourlyRate) * durationHours);
         const hasSufficientCoins = coinBalance >= coinsCost;
+        const isTimeValid = endTime > startTime;
 
         return (
           <Modal
@@ -550,29 +561,75 @@ export default function MemberTrainersPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
+                <input
+                  type="date"
+                  value={sessionDate}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setSessionDate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
-                  <input
-                    type="date"
-                    value={sessionDate}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => setSessionDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Start Time</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Time From (Start)</span>
+                  </label>
                   <input
                     type="time"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      setStartTime(newStart);
+                      if (endTime <= newStart) {
+                        const [h, m] = newStart.split(":").map(Number);
+                        const nextH = ((h + 1) % 24).toString().padStart(2, "0");
+                        setEndTime(`${nextH}:${(m || 0).toString().padStart(2, "0")}`);
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 font-mono"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Time Until (End)</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 font-mono ${
+                      !isTimeValid ? "border-rose-500 text-rose-300" : "border-slate-800"
+                    }`}
                     required
                   />
                 </div>
               </div>
+
+              {/* Dynamic Duration and Pricing Preview */}
+              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Duration: <strong className="text-white">{durationHours} hr{durationHours > 1 ? "s" : ""}</strong> ({startTime} to {endTime})</span>
+                </span>
+                <span className="font-bold text-emerald-400">
+                  ₱{calculatedPrice.toFixed(2)} / {coinsCost} Coins
+                </span>
+              </div>
+
+              {!isTimeValid && (
+                <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 text-[11px] text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>Invalid Time Range: &ldquo;Time Until&rdquo; must be later than &ldquo;Time From&rdquo;.</span>
+                </div>
+              )}
 
               {/* REAL-TIME AVAILABILITY & INTERACTIVE SLOT SELECTOR */}
               <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
@@ -610,7 +667,7 @@ export default function MemberTrainersPage() {
                     { startTime: "16:00", endTime: "17:00", isAvailable: true, status: "available" },
                     { startTime: "17:00", endTime: "18:00", isAvailable: true, status: "available" },
                   ]).map((slot: any) => {
-                    const isSelected = startTime === slot.startTime;
+                    const isSelected = startTime === slot.startTime && endTime === slot.endTime;
                     const isBooked = !slot.isAvailable || slot.status === "booked";
 
                     return (
@@ -618,7 +675,10 @@ export default function MemberTrainersPage() {
                         key={slot.startTime}
                         type="button"
                         disabled={isBooked}
-                        onClick={() => setStartTime(slot.startTime)}
+                        onClick={() => {
+                          setStartTime(slot.startTime);
+                          setEndTime(slot.endTime);
+                        }}
                         className={`px-2 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center justify-between transition ${
                           isBooked
                             ? "bg-slate-950/80 border border-rose-950 text-slate-500 cursor-not-allowed line-through opacity-75"
@@ -627,7 +687,7 @@ export default function MemberTrainersPage() {
                             : "bg-slate-950 border border-slate-800 text-slate-300 hover:border-slate-700"
                         }`}
                       >
-                        <span>{slot.startTime}</span>
+                        <span>{slot.startTime} - {slot.endTime}</span>
                         {isBooked ? (
                           <span className="text-[9px] text-rose-400 font-sans flex items-center gap-0.5">
                             <Lock className="w-2.5 h-2.5" /> Booked
@@ -734,11 +794,11 @@ export default function MemberTrainersPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white">Direct Payment</span>
                         <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
-                          ₱{Number(selectedTrainer.hourlyRate).toFixed(2)}
+                          ₱{calculatedPrice.toFixed(2)}
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Cash or Card at desk
+                        Cash or Card at desk (₱{Number(selectedTrainer.hourlyRate).toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
                       </div>
                     </div>
                   </button>
@@ -756,7 +816,7 @@ export default function MemberTrainersPage() {
                         <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <div>
                           <strong className="font-bold text-white">Sufficient Balance:</strong> You have {coinBalance} coins.
-                          After this reservation, your remaining balance will be{" "}
+                          After this {durationHours}-hour reservation, your remaining balance will be{" "}
                           <strong className="text-emerald-300">{coinBalance - coinsCost} coins</strong>.
                         </div>
                       </>
@@ -764,7 +824,7 @@ export default function MemberTrainersPage() {
                       <>
                         <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="font-bold text-white">Insufficient Balance for Payment:</strong> This private coach session requires{" "}
+                          <strong className="font-bold text-white">Insufficient Balance for Payment:</strong> This {durationHours}-hour private coach session requires{" "}
                           <strong className="text-white">{coinsCost} coins</strong>, but your balance is only{" "}
                           <strong className="text-rose-400">{coinBalance} coins</strong>. Please switch to Direct Payment or earn more coins through workouts.
                         </div>
@@ -781,12 +841,14 @@ export default function MemberTrainersPage() {
                 <Button
                   type="submit"
                   isLoading={submitting}
-                  disabled={paymentMethod === "coins" && !hasSufficientCoins}
+                  disabled={(paymentMethod === "coins" && !hasSufficientCoins) || !isTimeValid}
                   className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
                 >
-                  {paymentMethod === "coins"
+                  {!isTimeValid
+                    ? "Invalid Time Range (Until > From)"
+                    : paymentMethod === "coins"
                     ? (hasSufficientCoins ? `Redeem ${coinsCost} Coins & Book Coach` : `Insufficient Coins (${coinBalance}/${coinsCost})`)
-                    : "Confirm Coach Reservation"}
+                    : `Confirm Coach Reservation (₱${calculatedPrice.toFixed(2)})`}
                 </Button>
               </div>
             </form>

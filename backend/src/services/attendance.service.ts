@@ -140,28 +140,28 @@ export class AttendanceService {
       },
     });
 
-    // Award attendance reward coins (+15 coins for visiting gym)
+    // Award attendance reward points (+8 points for visiting gym)
     await prisma.member.update({
       where: { id: member.id },
-      data: { rewardCoins: { increment: 15 } },
+      data: { rewardCoins: { increment: 8 } },
     });
 
     await prisma.rewardTransaction.create({
       data: {
         memberId: member.id,
-        points: 15,
+        points: 8,
         transactionType: "earned",
-        reason: "Gym attendance visit bonus",
+        reason: "Gym attendance visit bonus (+8 points)",
         referenceId: attendance.id,
       },
     });
 
-    // Notify member of coins earned on attendance
+    // Notify member of points earned on attendance
     await prisma.notification.create({
       data: {
         userId: member.userId,
-        title: "Attendance Bonus (+15 Coins)",
-        message: `Welcome to the gym, ${member.user.firstName}! You earned 15 reward coins for checking in. New balance: ${member.rewardCoins + 15} coins.`,
+        title: "Attendance Bonus (+8 Points)",
+        message: `Welcome to the gym, ${member.user.firstName}! You earned 8 reward points for checking in. New balance: ${member.rewardCoins + 8} points.`,
         type: "reward",
       },
     }).catch(() => {});
@@ -173,7 +173,7 @@ export class AttendanceService {
 
     return {
       accessGranted: true,
-      message: `Welcome, ${member.user.firstName}! Entry verified.`,
+      message: `Welcome, ${member.user.firstName}! Entry verified. +8 Points Earned.`,
       attendance,
       member: {
         id: member.id,
@@ -182,27 +182,50 @@ export class AttendanceService {
         avatarUrl: member.user.avatarUrl,
         planName: activeMembership.plan.name,
         daysRemaining,
-        rewardCoins: member.rewardCoins + 15,
+        rewardCoins: member.rewardCoins + 8,
       },
     };
   }
 
-  static async checkOut(params: { memberId: string; attendanceId?: string }) {
+  static async checkOut(params: { memberId?: string; attendanceId?: string; identifier?: string }) {
     const now = new Date();
+    let targetMemberId = params.memberId;
+
+    if (!targetMemberId && params.identifier) {
+      const rawIdentifier = params.identifier.trim();
+      const parsed = parseMemberQrToken(rawIdentifier);
+      const lookupCode = parsed.memberCode || rawIdentifier;
+      const member = await prisma.member.findFirst({
+        where: {
+          OR: [
+            { qrCodeToken: rawIdentifier },
+            { memberCode: lookupCode },
+            { memberCode: rawIdentifier },
+            { user: { email: rawIdentifier.toLowerCase() } },
+          ],
+        },
+      });
+      if (member) {
+        targetMemberId = member.id;
+      }
+    }
 
     const attendance = params.attendanceId
       ? await prisma.attendance.findUnique({ where: { id: params.attendanceId } })
-      : await prisma.attendance.findFirst({
-          where: { memberId: params.memberId, checkOutTime: null },
+      : targetMemberId
+      ? await prisma.attendance.findFirst({
+          where: { memberId: targetMemberId, checkOutTime: null },
           orderBy: { checkInTime: "desc" },
-        });
+        })
+      : null;
 
     if (!attendance) {
       throw new Error("No active open check-in session found to check out.");
     }
 
-    const durationMinutes = Math.round(
-      (now.getTime() - new Date(attendance.checkInTime).getTime()) / (1000 * 60)
+    const durationMinutes = Math.max(
+      1,
+      Math.round((now.getTime() - new Date(attendance.checkInTime).getTime()) / (1000 * 60))
     );
 
     const updated = await prisma.attendance.update({
@@ -217,7 +240,7 @@ export class AttendanceService {
 
     return {
       success: true,
-      message: `Check-out recorded. Total workout duration: ${durationMinutes} minutes. Great job!`,
+      message: `Time Out recorded. Total workout duration: ${durationMinutes} minutes. Great job!`,
       attendance: updated,
       durationMinutes,
     };

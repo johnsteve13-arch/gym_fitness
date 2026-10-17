@@ -35,15 +35,16 @@ export class AttendanceController {
 
   static async checkOut(req: Request, res: Response, next: NextFunction) {
     try {
-      const { memberId, attendanceId } = req.body;
+      const { memberId, attendanceId, identifier } = req.body;
       const targetMemberId = memberId || req.user?.memberId;
-      if (!targetMemberId && !attendanceId) {
-        return sendError(res, "Member ID or Attendance ID is required to check out.", 400);
+      if (!targetMemberId && !attendanceId && !identifier) {
+        return sendError(res, "Member ID, QR code, or Attendance ID is required to check out.", 400);
       }
 
       const result = await AttendanceService.checkOut({
         memberId: targetMemberId,
         attendanceId,
+        identifier,
       });
 
       await recordAuditLog(req, "ATTENDANCE_CHECK_OUT", "attendances", result.attendance.id, {

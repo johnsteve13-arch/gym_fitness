@@ -12,17 +12,22 @@ import {
   QrCode,
   Clock,
   LogOut,
+  LogIn,
   Search,
   ExternalLink,
   CheckCircle,
   Activity,
-  Flame,
+  Award,
+  Users,
+  Timer,
+  Sparkles,
 } from "lucide-react";
 
 export default function AdminAttendancePage() {
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [peakHours, setPeakHours] = useState<{ label: string; value: number }[]>([]);
   const [manualId, setManualId] = useState("");
+  const [manualMode, setManualMode] = useState<"in" | "out">("in");
   const [manualLoading, setManualLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -39,33 +44,54 @@ export default function AdminAttendancePage() {
     loadData();
   }, []);
 
-  const handleManualCheckIn = async (e: React.FormEvent) => {
+  const handleManualAction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualId.trim()) return;
 
     setManualLoading(true);
     setFeedback(null);
     try {
-      const res = await api.verifyAndCheckIn(manualId, "manual_id");
-      if (res.accessGranted) {
-        setFeedback({ success: true, message: res.message });
+      if (manualMode === "in") {
+        const res = await api.verifyAndCheckIn(manualId, "manual_desk");
+        if (res.accessGranted) {
+          setFeedback({
+            success: true,
+            message: `Time In logged successfully for ${res.member?.name || manualId}! +8 Points awarded.`,
+          });
+          setManualId("");
+          loadData();
+        } else {
+          setFeedback({ success: false, message: res.reason || "Access Denied" });
+        }
+      } else {
+        const res = await api.checkOut(manualId);
+        setFeedback({
+          success: true,
+          message: res.message || `Time Out departure logged for ${manualId}.`,
+        });
         setManualId("");
         loadData();
-      } else {
-        setFeedback({ success: false, message: res.reason || "Access Denied" });
       }
     } catch (err: any) {
-      setFeedback({ success: false, message: err.message || "Failed to check in." });
+      setFeedback({ success: false, message: err.message || "Failed to process attendance." });
     } finally {
       setManualLoading(false);
     }
   };
 
   const handleManualCheckOut = async (memberId: string) => {
-    await api.checkOut(memberId);
-    setFeedback({ success: true, message: "Check-out departure recorded." });
-    loadData();
+    try {
+      const res = await api.checkOut(memberId);
+      setFeedback({ success: true, message: res.message || "Check-out departure recorded." });
+      loadData();
+    } catch (e: any) {
+      setFeedback({ success: false, message: e.message || "Failed to record check-out." });
+    }
   };
+
+  const activeOnFloorCount = attendances.filter((a) => !a.checkOutTime).length;
+  const completedSessionsCount = attendances.filter((a) => !!a.checkOutTime).length;
+  const totalPointsAwarded = attendances.length * 8;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -77,41 +103,115 @@ export default function AdminAttendancePage() {
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Turnstile monitoring, peak load distribution, and manual reception entry verification
+            Real-time turnstile monitoring, Time In & Time Out logs, and member attendance points (+8 Pts per visit)
           </p>
         </div>
 
         <Link href="/kiosk">
           <Button size="sm" leftIcon={<QrCode className="w-4 h-4" />} rightIcon={<ExternalLink className="w-3.5 h-3.5" />}>
-            Full Reception Kiosk
+            Open Turnstile Kiosk
           </Button>
         </Link>
       </div>
 
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="glass-card border-slate-800 p-4">
+          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Total Check-Ins</span>
+            <LogIn className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-black text-white">{attendances.length}</div>
+          <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">Visits Recorded</div>
+        </Card>
+
+        <Card className="glass-card border-slate-800 p-4">
+          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Active on Floor</span>
+            <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+          </div>
+          <div className="text-2xl font-black text-emerald-400">{activeOnFloorCount}</div>
+          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">Currently Training</div>
+        </Card>
+
+        <Card className="glass-card border-slate-800 p-4">
+          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Completed Sessions</span>
+            <LogOut className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-black text-white">{completedSessionsCount}</div>
+          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">Timed Out & Departed</div>
+        </Card>
+
+        <Card className="glass-card border-slate-800 p-4">
+          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span>Points Awarded</span>
+            <Award className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-black text-amber-400">{totalPointsAwarded}</div>
+          <div className="text-[10px] text-amber-300 font-semibold mt-0.5">+8 Points Per Visit</div>
+        </Card>
+      </div>
+
       {feedback && (
         <div
-          className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+          className={`p-3.5 rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-lg transition ${
             feedback.success
-              ? "bg-emerald-950/70 border border-emerald-800 text-emerald-300"
-              : "bg-red-950/70 border border-red-800 text-red-300"
+              ? "bg-emerald-950/80 border border-emerald-500/50 text-emerald-300"
+              : "bg-red-950/80 border border-red-500/50 text-red-300"
           }`}
         >
-          {feedback.success ? <CheckCircle className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
+          {feedback.success ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> : <LogOut className="w-4 h-4 text-red-400 shrink-0" />}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Manual Check-in & Peak Hours Grid */}
+      {/* Manual Action & Peak Hours Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Manual Reception Desk Check-in Box */}
+        {/* Reception Desk Manual Entry Box */}
         <div className="lg:col-span-5">
           <Card className="glass-card border-slate-800 p-5">
-            <h3 className="text-sm font-bold text-white mb-1">Manual Reception Check-In</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-white">Manual Reception Turnstile</h3>
+              <Badge variant={manualMode === "in" ? "emerald" : "warning"} className="text-[10px]">
+                {manualMode === "in" ? "Time In (+8 Pts)" : "Time Out"}
+              </Badge>
+            </div>
             <p className="text-xs text-slate-400 mb-4">
-              Enter member code, email, or badge string to verify pass and log entry.
+              {manualMode === "in"
+                ? "Enter member ID, code, or email to verify membership, open turnstile, and award 8 attendance points."
+                : "Enter member code or email to record departure time and calculate workout duration."}
             </p>
 
-            <form onSubmit={handleManualCheckIn} className="space-y-3">
+            {/* Mode Switcher */}
+            <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800 mb-3">
+              <button
+                type="button"
+                onClick={() => setManualMode("in")}
+                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  manualMode === "in"
+                    ? "bg-emerald-500 text-slate-950 shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Time In (+8)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualMode("out")}
+                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  manualMode === "out"
+                    ? "bg-amber-500 text-slate-950 shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Time Out</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleManualAction} className="space-y-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                 <input
@@ -124,8 +224,17 @@ export default function AdminAttendancePage() {
                 />
               </div>
 
-              <Button type="submit" isLoading={manualLoading} size="sm" className="w-full font-bold">
-                Verify Pass & Open Turnstile
+              <Button
+                type="submit"
+                isLoading={manualLoading}
+                size="sm"
+                className={`w-full font-bold ${
+                  manualMode === "in"
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
+                    : "bg-amber-500 hover:bg-amber-400 text-slate-950"
+                }`}
+              >
+                {manualMode === "in" ? "Log Time In (+8 Points)" : "Log Time Out Departure"}
               </Button>
             </form>
           </Card>
@@ -139,7 +248,7 @@ export default function AdminAttendancePage() {
                 <h3 className="text-sm font-bold text-white">Peak-Hour Traffic Density</h3>
                 <p className="text-xs text-slate-400">Visits by hour of day (06:00 to 21:00)</p>
               </div>
-              <Badge variant="emerald">Real-Time Distribution</Badge>
+              <Badge variant="emerald">Live Gym Floor</Badge>
             </div>
             <BarChart data={peakHours} height={170} barColor="#10B981" />
           </Card>
@@ -148,9 +257,17 @@ export default function AdminAttendancePage() {
 
       {/* Attendance History Table */}
       <Card className="glass-card border-slate-800 p-0 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center">
-          <h3 className="text-sm font-bold text-white">Recent Turnstile Check-Ins</h3>
-          <span className="text-xs text-slate-400">{attendances.length} Sessions Logged</span>
+        <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-400" />
+              <span>Turnstile Attendance Records (Time In & Time Out)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Live tracking of check-in times, departure times, workout durations, and points gained
+            </p>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">{attendances.length} Sessions Logged</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -158,80 +275,129 @@ export default function AdminAttendancePage() {
             <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
               <tr>
                 <th className="px-5 py-3.5">Athlete</th>
-                <th className="px-4 py-3.5">Check-In</th>
-                <th className="px-4 py-3.5">Check-Out</th>
+                <th className="px-4 py-3.5">Time In</th>
+                <th className="px-4 py-3.5">Time Out</th>
+                <th className="px-4 py-3.5">Duration</th>
+                <th className="px-4 py-3.5">Points Gained</th>
                 <th className="px-4 py-3.5">Method</th>
-                <th className="px-4 py-3.5">Session Status</th>
+                <th className="px-4 py-3.5">Status</th>
                 <th className="px-4 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {attendances.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-500">
                     No check-in entries recorded yet. Sessions logged at reception or self-kiosk will appear here.
                   </td>
                 </tr>
               ) : (
                 attendances.map((att) => {
-                const isOngoing = !att.checkOutTime;
+                  const isOngoing = !att.checkOutTime;
+                  let durationStr = "Ongoing";
+                  if (att.checkOutTime) {
+                    const diffMins = Math.max(
+                      1,
+                      Math.round(
+                        (new Date(att.checkOutTime).getTime() - new Date(att.checkInTime).getTime()) /
+                          (1000 * 60)
+                      )
+                    );
+                    const hours = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    durationStr = hours > 0 ? `${hours}h ${mins}m` : `${mins} mins`;
+                  }
 
-                return (
-                  <tr key={att.id} className="hover:bg-slate-800/40 transition">
-                    <td className="px-5 py-3.5">
-                      <div className="font-semibold text-white">
-                        {att.member?.user?.firstName} {att.member?.user?.lastName}
-                      </div>
-                      <div className="text-[11px] text-slate-400 font-mono">{att.member?.memberCode}</div>
-                    </td>
+                  return (
+                    <tr key={att.id} className="hover:bg-slate-800/40 transition">
+                      <td className="px-5 py-3.5">
+                        <div className="font-semibold text-white">
+                          {att.member?.user?.firstName || "Athlete"} {att.member?.user?.lastName || ""}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          {att.member?.memberCode || "MEM-ATHLETE"}
+                        </div>
+                      </td>
 
-                    <td className="px-4 py-3.5">
-                      <span className="flex items-center gap-1.5 text-slate-300">
-                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                        {new Date(att.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3.5 text-slate-400">
-                      {att.checkOutTime ? (
-                        new Date(att.checkOutTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                      ) : (
-                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          Currently in Gym
+                      <td className="px-4 py-3.5">
+                        <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                          <LogIn className="w-3.5 h-3.5" />
+                          {new Date(att.checkInTime).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </span>
-                      )}
-                    </td>
+                        <div className="text-[10px] text-slate-500">
+                          {new Date(att.checkInTime).toLocaleDateString()}
+                        </div>
+                      </td>
 
-                    <td className="px-4 py-3.5">
-                      <Badge variant="neutral" className="uppercase font-mono text-[10px]">
-                        {att.checkInMethod}
-                      </Badge>
-                    </td>
+                      <td className="px-4 py-3.5">
+                        {att.checkOutTime ? (
+                          <div>
+                            <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                              <LogOut className="w-3.5 h-3.5" />
+                              {new Date(att.checkOutTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <div className="text-[10px] text-slate-500">
+                              {new Date(att.checkOutTime).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            Active on Floor
+                          </span>
+                        )}
+                      </td>
 
-                    <td className="px-4 py-3.5">
-                      <Badge variant={isOngoing ? "success" : "neutral"}>
-                        {isOngoing ? "Active Workout" : "Completed"}
-                      </Badge>
-                    </td>
+                      <td className="px-4 py-3.5">
+                        <span className="font-mono text-slate-300 flex items-center gap-1">
+                          <Timer className="w-3.5 h-3.5 text-slate-500" />
+                          {durationStr}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-3.5 text-right">
-                      {isOngoing ? (
-                        <button
-                          onClick={() => handleManualCheckOut(att.memberId)}
-                          className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-[11px] font-semibold transition"
-                        >
-                          Check Out
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-slate-500">Departed</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold text-[11px]">
+                          <Award className="w-3 h-3" />
+                          +8 Points
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3.5">
+                        <Badge variant="neutral" className="uppercase font-mono text-[10px]">
+                          {att.checkInMethod || "QR Pass"}
+                        </Badge>
+                      </td>
+
+                      <td className="px-4 py-3.5">
+                        <Badge variant={isOngoing ? "success" : "neutral"}>
+                          {isOngoing ? "Active Workout" : "Completed"}
+                        </Badge>
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right">
+                        {isOngoing ? (
+                          <button
+                            type="button"
+                            onClick={() => handleManualCheckOut(att.memberId || att.member?.id || "")}
+                            className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-[11px] font-semibold transition"
+                          >
+                            Time Out
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">Departed</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
           </table>
         </div>
       </Card>

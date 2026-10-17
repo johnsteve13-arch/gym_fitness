@@ -25,6 +25,8 @@ import {
   UserCheck,
   Users,
   Target,
+  Timer,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function MemberOverviewPage() {
@@ -36,11 +38,12 @@ export default function MemberOverviewPage() {
   const [coinBalance, setCoinBalance] = useState<number>(50);
   const [paymentMethod, setPaymentMethod] = useState<"coins" | "cash">("coins");
 
-  // Quick Book Form State
+  // Quick Book Form State (Customizable Time From and Time Until)
   const [selectedTrainerId, setSelectedTrainerId] = useState("");
   const [workoutRoutine, setWorkoutRoutine] = useState("Push & Shoulder Hypertrophy");
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState("10:00");
+  const [endTime, setEndTime] = useState("11:00");
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
 
@@ -86,9 +89,17 @@ export default function MemberOverviewPage() {
       return;
     }
 
-    const coinsCost = api.calculateTrainerCoins(coach.hourlyRate);
+    if (endTime <= startTime) {
+      alert("Invalid session time: 'Time Until' must be later than 'Time From'.");
+      return;
+    }
+
+    const durationHours = api.calculateDurationHours(startTime, endTime);
+    const coinsCost = api.calculateTrainerCoins(coach.hourlyRate, durationHours);
+    const calculatedPrice = Math.round(Number(coach.hourlyRate) * durationHours);
+
     if (paymentMethod === "coins" && coinBalance < coinsCost) {
-      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
+      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this ${durationHours}-hour session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
       return;
     }
 
@@ -100,10 +111,6 @@ export default function MemberOverviewPage() {
         storedMembers.find(
           (m) => m.userId === user?.id || m.user?.email.toLowerCase() === user?.email.toLowerCase()
         ) || storedMembers[0];
-
-      const [hours, minutes] = startTime.split(":");
-      const endHour = ((parseInt(hours, 10) + 1) % 24).toString().padStart(2, "0");
-      const endTime = `${endHour}:${minutes || "00"}`;
 
       await api.bookTrainer({
         trainerId: coach.id,
@@ -120,7 +127,7 @@ export default function MemberOverviewPage() {
         endTime,
         sessionType: workoutRoutine || "1-on-1 Workout Coaching",
         notes: `Target Workout: ${workoutRoutine}. ${bookingNotes || "Lifting form critique and progressive overload assistance."}`,
-        price: coach.hourlyRate,
+        price: calculatedPrice,
         paymentMethod,
         coinsPaid: paymentMethod === "coins" ? coinsCost : undefined,
       });
@@ -136,11 +143,11 @@ export default function MemberOverviewPage() {
 
       if (paymentMethod === "coins") {
         setActionSuccess(
-          `Personal trainer booked! Redeemed ${coinsCost} coins for Coach ${coach.user?.firstName}. Remaining balance: ${updatedCoins} coins.`
+          `Personal trainer booked! Redeemed ${coinsCost} coins for Coach ${coach.user?.firstName} (${durationHours} hrs, ${startTime} - ${endTime}). Remaining balance: ${updatedCoins} coins.`
         );
       } else {
         setActionSuccess(
-          `Personal trainer booked! Coach ${coach.user?.firstName} reserved for your "${workoutRoutine}" workout on ${sessionDate} at ${startTime}!`
+          `Personal trainer booked! Coach ${coach.user?.firstName} reserved for ${durationHours} hrs (${startTime} - ${endTime}) on ${sessionDate}!`
         );
       }
 
@@ -507,29 +514,85 @@ export default function MemberOverviewPage() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
+            <input
+              type="date"
+              value={sessionDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setSessionDate(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+              required
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Time From (Start)</span>
+              </label>
               <input
-                type="date"
-                value={sessionDate}
-                min={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setSessionDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                type="time"
+                value={startTime}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  setStartTime(newStart);
+                  if (endTime <= newStart) {
+                    const [h, m] = newStart.split(":").map(Number);
+                    const nextH = ((h + 1) % 24).toString().padStart(2, "0");
+                    setEndTime(`${nextH}:${(m || 0).toString().padStart(2, "0")}`);
+                  }
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 font-mono"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Start Time</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Time Until (End)</span>
+              </label>
               <input
                 type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 font-mono ${
+                  endTime <= startTime ? "border-rose-500 text-rose-300" : "border-slate-800"
+                }`}
                 required
               />
             </div>
           </div>
+
+          {/* Dynamic Duration and Pricing Preview */}
+          {(() => {
+            const isTimeValid = endTime > startTime;
+            const durationHours = api.calculateDurationHours(startTime, endTime);
+            const calculatedPrice = chosenCoach ? Math.round(Number(chosenCoach.hourlyRate) * durationHours) : 75;
+            const coachCoins = chosenCoach ? api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours) : 50;
+
+            return (
+              <>
+                <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Duration: <strong className="text-white">{durationHours} hr{durationHours > 1 ? "s" : ""}</strong> ({startTime} to {endTime})</span>
+                  </span>
+                  <span className="font-bold text-emerald-400">
+                    ₱{calculatedPrice.toFixed(2)} / {coachCoins} Coins
+                  </span>
+                </div>
+
+                {!isTimeValid && (
+                  <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 text-[11px] text-rose-300 flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>Invalid Time Range: &ldquo;Time Until&rdquo; must be after &ldquo;Time From&rdquo;.</span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">
@@ -545,7 +608,10 @@ export default function MemberOverviewPage() {
           </div>
 
           {chosenCoach && (() => {
-            const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate);
+            const isTimeValid = endTime > startTime;
+            const durationHours = api.calculateDurationHours(startTime, endTime);
+            const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours);
+            const calculatedPrice = Math.round(Number(chosenCoach.hourlyRate) * durationHours);
             const hasSufficient = coinBalance >= coachCoins;
 
             return (
@@ -607,11 +673,11 @@ export default function MemberOverviewPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white">Direct Payment</span>
                         <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
-                          ₱{Number(chosenCoach.hourlyRate).toFixed(2)}
+                          ₱{calculatedPrice.toFixed(2)}
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Cash or Card at desk
+                        Cash or Card (₱{Number(chosenCoach.hourlyRate).toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
                       </div>
                     </div>
                   </button>
@@ -651,21 +717,34 @@ export default function MemberOverviewPage() {
             <Button type="button" variant="secondary" onClick={() => setIsQuickBookOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              isLoading={bookingLoading}
-              disabled={
-                trainers.length === 0 ||
-                (paymentMethod === "coins" && chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate))
-              }
-              className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
-            >
-              {paymentMethod === "coins"
-                ? (chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate)
-                    ? `Insufficient Coins (${coinBalance}/${api.calculateTrainerCoins(chosenCoach.hourlyRate)})`
-                    : `Redeem Coins & Book Coach`)
-                : "Confirm Coach Reservation"}
-            </Button>
+            {chosenCoach && (() => {
+              const isTimeValid = endTime > startTime;
+              const durationHours = api.calculateDurationHours(startTime, endTime);
+              const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours);
+              const calculatedPrice = Math.round(Number(chosenCoach.hourlyRate) * durationHours);
+              const hasSufficient = coinBalance >= coachCoins;
+
+              return (
+                <Button
+                  type="submit"
+                  isLoading={bookingLoading}
+                  disabled={
+                    trainers.length === 0 ||
+                    !isTimeValid ||
+                    (paymentMethod === "coins" && !hasSufficient)
+                  }
+                  className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
+                >
+                  {!isTimeValid
+                    ? "Invalid Time Range (Until > From)"
+                    : paymentMethod === "coins"
+                    ? (hasSufficient
+                        ? `Redeem ${coachCoins} Coins & Book Coach`
+                        : `Insufficient Coins (${coinBalance}/${coachCoins})`)
+                    : `Confirm Coach Reservation (₱${calculatedPrice.toFixed(2)})`}
+                </Button>
+              );
+            })()}
           </div>
         </form>
       </Modal>

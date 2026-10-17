@@ -263,6 +263,25 @@ class ApiClient {
     } catch {}
   }
 
+  getStoredAttendances(): Attendance[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("apex_attendances");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveStoredAttendance(attendance: Attendance) {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = this.getStoredAttendances();
+      const updated = [attendance, ...existing.filter((a) => a.id !== attendance.id)];
+      localStorage.setItem("apex_attendances", JSON.stringify(updated));
+    } catch {}
+  }
+
   getDeclinedConflicts(): any[] {
     if (typeof window === "undefined") return [];
     try {
@@ -747,7 +766,7 @@ class ApiClient {
     }
   }
 
-  // ATTENDANCE & KIOSK
+  // ATTENDANCE & KIOSK (TIME IN & TIME OUT)
   async verifyAndCheckIn(identifier: string, method: string = "qr"): Promise<any> {
     try {
       const res = await this.request<any>("/attendance/check-in", {
@@ -756,6 +775,9 @@ class ApiClient {
       });
       if (res?.accessGranted && res?.member?.rewardCoins !== undefined) {
         this.setMemberCoins(res.member.rewardCoins, res.member.id);
+      }
+      if (res?.attendance) {
+        this.saveStoredAttendance(res.attendance);
       }
       return res;
     } catch {
@@ -780,23 +802,27 @@ class ApiClient {
         id: `att-${Date.now()}`,
         memberId: member.id,
         checkInTime: new Date().toISOString(),
+        checkOutTime: null,
         checkInMethod: method,
         member,
       };
       MOCK_ATTENDANCES.unshift(newAtt);
-      const updatedCoins = (member.rewardCoins || 0) + 15;
+      this.saveStoredAttendance(newAtt);
+
+      // Award 8 points for every member attendance
+      const updatedCoins = (member.rewardCoins || 0) + 8;
       member.rewardCoins = updatedCoins;
       this.setMemberCoins(updatedCoins, member.id);
       if (stored.length > 0) {
         localStorage.setItem("apex_registered_members", JSON.stringify(stored));
       }
 
-      // Add notification for attendance bonus coins
+      // Add notification for attendance bonus points (+8 Points)
       MOCK_NOTIFICATIONS.unshift({
         id: `notif-att-${Date.now()}`,
         userId: member.userId,
-        title: "Attendance Bonus (+15 Coins)",
-        message: `Welcome to the gym, ${member.user?.firstName}! You earned 15 reward coins for checking in today. Updated balance: ${updatedCoins} coins.`,
+        title: "Attendance Bonus (+8 Points)",
+        message: `Welcome to the gym, ${member.user?.firstName}! You earned 8 reward points for checking in today. Updated balance: ${updatedCoins} points.`,
         type: "reward",
         isRead: false,
         createdAt: new Date().toISOString(),
@@ -804,7 +830,7 @@ class ApiClient {
 
       return {
         accessGranted: true,
-        message: `Welcome, ${member.user?.firstName}! Access verified. +15 Attendance Coins awarded.`,
+        message: `Welcome, ${member.user?.firstName}! Access verified. Time In recorded. +8 Points Earned.`,
         attendance: newAtt,
         member: {
           id: member.id,
@@ -819,27 +845,101 @@ class ApiClient {
     }
   }
 
-  async checkOut(memberId?: string): Promise<any> {
+  async checkOut(identifierOrMemberId?: string, attendanceId?: string): Promise<any> {
     try {
-      return await this.request("/attendance/check-out", {
+      const res = await this.request<any>("/attendance/check-out", {
         method: "POST",
-        body: JSON.stringify({ memberId }),
+        body: JSON.stringify({
+          memberId: identifierOrMemberId,
+          identifier: identifierOrMemberId,
+          attendanceId,
+        }),
       });
+      if (res?.attendance) {
+        this.saveStoredAttendance(res.attendance);
+      }
+      return res;
     } catch {
+      const storedAtts = this.getStoredAttendances();
+      const allAtts = [...storedAtts, ...MOCK_ATTENDANCES];
+
+      // Find member if identifier passed
+      const storedMembers = this.getStoredMembers();
+      const allMembers = [...storedMembers, ...MOCK_MEMBERS];
+      const matchedMember = identifierOrMemberId
+        ? allMembers.find(
+            (m) =>
+              m.id === identifierOrMemberId ||
+              m.memberCode.toLowerCase() === identifierOrMemberId.toLowerCase() ||
+              m.qrCodeToken.toLowerCase() === identifierOrMemberId.toLowerCase() ||
+              m.user?.email.toLowerCase() === identifierOrMemberId.toLowerCase()
+          )
+        : null;
+
+      const targetMemberId = matchedMember?.id || identifierOrMemberId;
+
+      // Find active open session
+      const targetAtt = allAtts.find((a) => {
+        if (attendanceId && a.id === attendanceId) return true;
+        if (targetMemberId && (a.memberId === targetMemberId || a.member?.id === targetMemberId)) {
+          return !a.checkOutTime;
+        }
+        return false;
+      }) || allAtts.find((a) => !a.checkOutTime);
+
+      const now = new Date();
+      if (targetAtt) {
+        targetAtt.checkOutTime = now.toISOString();
+        const durationMinutes = Math.max(
+          1,
+          Math.round((now.getTime() - new Date(targetAtt.checkInTime).getTime()) / (1000 * 60))
+        );
+        targetAtt.notes = `Session completed | Duration: ${durationMinutes} mins`;
+        this.saveStoredAttendance(targetAtt);
+
+        // Also update in MOCK_ATTENDANCES if present
+        const mockIdx = MOCK_ATTENDANCES.findIndex((a) => a.id === targetAtt.id);
+        if (mockIdx !== -1) {
+          MOCK_ATTENDANCES[mockIdx] = targetAtt;
+        }
+
+        return {
+          success: true,
+          message: `Time Out recorded. Session completed! Total workout duration: ${durationMinutes} minutes. Great job!`,
+          durationMinutes,
+          attendance: targetAtt,
+          member: targetAtt.member || matchedMember,
+        };
+      }
+
       return {
         success: true,
-        message: "Check-out recorded. Great session!",
-        durationMinutes: 65,
+        message: "Time Out recorded. Total workout duration: 60 minutes. Great job!",
+        durationMinutes: 60,
       };
     }
   }
 
-  async getAttendanceHistory(): Promise<Attendance[]> {
+  async getAttendanceHistory(memberId?: string): Promise<Attendance[]> {
     try {
-      return await this.request<Attendance[]>("/attendance/history");
-    } catch {
-      return MOCK_ATTENDANCES;
+      const q = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+      const remote = await this.request<Attendance[]>(`/attendance/history${q}`);
+      if (Array.isArray(remote)) return remote;
+    } catch {}
+
+    const stored = this.getStoredAttendances();
+    const map = new Map<string, Attendance>();
+    for (const a of [...stored, ...MOCK_ATTENDANCES]) {
+      if (!map.has(a.id)) {
+        map.set(a.id, a);
+      }
     }
+    let list = Array.from(map.values());
+    if (memberId) {
+      list = list.filter((a) => a.memberId === memberId || a.member?.id === memberId);
+    }
+    list.sort((a, b) => new Date(b.checkInTime).getTime() - new Date(a.checkInTime).getTime());
+    return list;
   }
 
   async getPeakHours(): Promise<{ hour: string; visits: number }[]> {
@@ -1371,12 +1471,19 @@ class ApiClient {
     return { success: true, message: "Trainer removed successfully." };
   }
 
-  calculateTrainerCoins(hourlyRate: number | string): number {
+  calculateDurationHours(startTime: string, endTime: string): number {
+    if (!startTime || !endTime) return 1;
+    const [sH, sM] = startTime.split(":").map(Number);
+    const [eH, eM] = endTime.split(":").map(Number);
+    const diff = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+    if (diff <= 0) return 1;
+    return Math.max(0.5, Math.round((diff / 60) * 10) / 10);
+  }
+
+  calculateTrainerCoins(hourlyRate: number | string, durationHours: number = 1): number {
     const rate = Number(hourlyRate) || 75;
-    if (rate > 200) {
-      return Math.round(rate / 5);
-    }
-    return Math.max(50, Math.round(rate));
+    const base = rate > 200 ? Math.round(rate / 5) : Math.max(50, Math.round(rate));
+    return Math.round(base * durationHours);
   }
 
   getMemberCoins(memberId?: string): number {
@@ -1429,17 +1536,20 @@ class ApiClient {
   }
 
   async bookTrainer(body: any): Promise<any> {
+    const durationHours = this.calculateDurationHours(body.startTime, body.endTime || "11:00");
     const isCoins = body.paymentMethod === "coins";
+    const baseCoins = this.calculateTrainerCoins(body.price || 75, 1);
     const coinsRequired =
       body.coinsPaid !== undefined
         ? Number(body.coinsPaid)
-        : this.calculateTrainerCoins(body.price || 75);
+        : Math.round(baseCoins * durationHours);
+    const calculatedPrice = Math.round(Number(body.price || 75) * durationHours);
 
     if (isCoins) {
       const currentCoins = this.getMemberCoins(body.memberId);
       if (currentCoins < coinsRequired) {
         throw new Error(
-          `Insufficient coin balance. You have ${currentCoins} coins, but this session requires ${coinsRequired} coins. Please choose cash/card or earn more coins.`
+          `Insufficient coin balance. You have ${currentCoins} coins, but this ${durationHours}-hour session requires ${coinsRequired} coins. Please choose cash/card or earn more coins.`
         );
       }
     }
@@ -1452,6 +1562,9 @@ class ApiClient {
         method: "POST",
         body: JSON.stringify({
           ...body,
+          startTime: body.startTime,
+          endTime: body.endTime || "11:00",
+          price: calculatedPrice,
           paymentMethod: isCoins ? "coins" : (body.paymentMethod || "cash"),
           coinsPaid: isCoins ? coinsRequired : undefined,
         }),
@@ -1574,13 +1687,14 @@ class ApiClient {
         sessionDate: body.sessionDate,
         startTime: body.startTime,
         endTime: body.endTime || "11:00",
+        durationHours,
         sessionType: body.sessionType || "1-on-1 Fitness Coaching",
         status: "confirmed",
         paymentStatus: "paid",
         paymentMethod: isCoins ? "coins" : (body.paymentMethod || "cash"),
         coinsPaid: isCoins ? coinsRequired : undefined,
-        price: body.price || 75.0,
-        notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins` : ""),
+        price: calculatedPrice,
+        notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs` : `Duration: ${durationHours} hrs`),
         createdAt: new Date().toISOString(),
         member: {
           id: body.memberId,
@@ -1611,7 +1725,7 @@ class ApiClient {
           id: `notif-${Date.now()}`,
           userId: body.memberId || "user-member",
           title: "Coins Redeemed for Trainer Session",
-          message: `Redeemed ${coinsRequired} Loyalty Coins for 1-on-1 session with ${body.trainerName || "Coach"}. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`,
+          message: `Redeemed ${coinsRequired} Loyalty Coins for ${durationHours} hr session with ${body.trainerName || "Coach"}. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`,
           type: "reward",
           isRead: false,
           createdAt: new Date().toISOString(),
@@ -1624,8 +1738,8 @@ class ApiClient {
         coinsPaid: isCoins ? coinsRequired : 0,
         remainingCoins: this.getMemberCoins(body.memberId),
         message: isCoins
-          ? `Trainer session confirmed! Successfully redeemed ${coinsRequired} coins. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`
-          : "Trainer session booked. Confirmed in schedule.",
+          ? `Trainer session confirmed! Successfully redeemed ${coinsRequired} coins for ${durationHours} hr session. Remaining balance: ${this.getMemberCoins(body.memberId)} coins.`
+          : `Trainer session booked (${durationHours} hrs). Confirmed in schedule.`,
       };
     }
   }

@@ -146,11 +146,17 @@ export class BookingService {
       }
 
       // E. Payment Processing (Coins vs Cash/Card) - Protected because validation passed!
+      const [startH, startM] = data.startTime.split(":").map(Number);
+      const [endH, endM] = data.endTime.split(":").map(Number);
+      const durationHours = Math.max(0.5, (endH * 60 + (endM || 0) - (startH * 60 + (startM || 0))) / 60);
+
+      const calculatedPrice = Math.round(Number(trainer.hourlyRate) * durationHours);
+      const baseCoinRate = Math.max(50, Math.round(Number(trainer.hourlyRate) > 200 ? Number(trainer.hourlyRate) / 5 : Number(trainer.hourlyRate)));
       const isCoinsPayment = data.paymentMethod === "coins";
       const coinsRequired =
         data.coinsPaid !== undefined
           ? Number(data.coinsPaid)
-          : Math.max(50, Math.round(Number(trainer.hourlyRate) > 200 ? Number(trainer.hourlyRate) / 5 : Number(trainer.hourlyRate)));
+          : Math.round(baseCoinRate * durationHours);
 
       if (isCoinsPayment) {
         const member = await tx.member.findUnique({
@@ -161,7 +167,7 @@ export class BookingService {
 
         if (member.rewardCoins < coinsRequired) {
           throw new Error(
-            `Insufficient coin balance. You have ${member.rewardCoins} coins, but this booking requires ${coinsRequired} coins.`
+            `Insufficient coin balance. You have ${member.rewardCoins} coins, but this ${durationHours}-hour booking requires ${coinsRequired} coins.`
           );
         }
 
@@ -181,8 +187,8 @@ export class BookingService {
             sessionType: data.sessionType || "1-on-1 Fitness",
             status: "confirmed",
             paymentStatus: "completed",
-            price: trainer.hourlyRate,
-            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins]` : `[Redeemed ${coinsRequired} Coins]`,
+            price: calculatedPrice,
+            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs]` : `[Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs]`,
             expiresAt: null,
           },
           include: {
@@ -198,7 +204,7 @@ export class BookingService {
           data: {
             userId: member.userId,
             title: "Loyalty Coins Redeemed for Trainer",
-            message: `Redeemed ${coinsRequired} coins for 1-on-1 session with Coach ${trainer.user?.firstName || "Trainer"}.`,
+            message: `Redeemed ${coinsRequired} coins for ${durationHours} hr 1-on-1 session with Coach ${trainer.user?.firstName || "Trainer"} (${data.startTime} - ${data.endTime}).`,
             type: "reward",
           },
         });
@@ -220,7 +226,7 @@ export class BookingService {
           sessionType: data.sessionType || "1-on-1 Fitness",
           status: "pending",
           paymentStatus: "unpaid",
-          price: trainer.hourlyRate,
+          price: calculatedPrice,
           notes: data.notes || null,
           expiresAt,
         },
