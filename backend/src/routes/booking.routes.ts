@@ -6,6 +6,7 @@ import { isStaffOrAdmin } from "../middleware/role.middleware";
 const router = Router();
 
 router.get("/trainers", BookingController.listTrainers);
+router.get("/trainers/:id/availability", BookingController.getTrainerAvailability);
 
 router.use(authenticate);
 
@@ -16,5 +17,6 @@ router.delete("/trainers/:id", isStaffOrAdmin, BookingController.deleteTrainer);
 router.post("/", BookingController.createBooking);
 router.get("/", BookingController.listBookings);
 router.patch("/:id/status", BookingController.updateStatus);
+router.get("/conflicts", isStaffOrAdmin, BookingController.listScheduleConflicts);
 
 export default router;

@@ -263,6 +263,36 @@ class ApiClient {
     } catch {}
   }
 
+  getDeclinedConflicts(): any[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("apex_declined_conflicts");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveDeclinedConflict(conflict: any) {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = this.getDeclinedConflicts();
+      const updated = [conflict, ...existing.filter((c) => c.id !== conflict.id)];
+      localStorage.setItem("apex_declined_conflicts", JSON.stringify(updated.slice(0, 100)));
+
+      // Add Admin Notification
+      MOCK_NOTIFICATIONS.unshift({
+        id: `notif-conflict-${Date.now()}`,
+        userId: "user-admin",
+        title: "⚠️ Trainer Booking Declined: Conflict Prevented",
+        message: `${conflict.memberName || "Member"} attempted to book ${conflict.trainerName || "Trainer"} on ${conflict.sessionDate} (${conflict.startTime} - ${conflict.endTime}). Request declined: conflict prevented.`,
+        type: "system",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+    } catch {}
+  }
+
   async register(body: any): Promise<{ token: string; user: User }> {
     const role = body.role === "trainer" ? "trainer" : "member";
 
@@ -1132,9 +1162,10 @@ class ApiClient {
           `Insufficient coin balance. You have ${currentCoins} coins, but this session requires ${coinsRequired} coins. Please choose cash/card or earn more coins.`
         );
       }
-      const newBalance = currentCoins - coinsRequired;
-      this.setMemberCoins(newBalance, body.memberId);
     }
+
+    const declineMessage =
+      "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot.";
 
     try {
       const res = await this.request<any>("/bookings", {
@@ -1145,9 +1176,113 @@ class ApiClient {
           coinsPaid: isCoins ? coinsRequired : undefined,
         }),
       });
+
+      // Payment Protection: Deduct coins only after backend confirms successful booking
+      if (isCoins) {
+        const currentCoins = this.getMemberCoins(body.memberId);
+        this.setMemberCoins(Math.max(0, currentCoins - coinsRequired), body.memberId);
+      }
+
       this.saveStoredBooking(res);
       return res;
-    } catch {
+    } catch (err: any) {
+      const errMsg = err?.message || "";
+      const isDecline =
+        errMsg.includes("Booking Declined") ||
+        errMsg.includes("unavailable") ||
+        errMsg.includes("Double-booking") ||
+        errMsg.includes("active reservation") ||
+        errMsg.includes("outside coach working hours") ||
+        errMsg.includes("409");
+
+      if (isDecline) {
+        // Payment Protection: zero coins deducted, record conflict in admin monitoring
+        this.saveDeclinedConflict({
+          id: `conflict-${Date.now()}`,
+          trainerId: body.trainerId,
+          trainerName: body.trainerName || "Coach",
+          memberId: body.memberId,
+          memberName: body.memberName || "Athlete",
+          sessionDate: (body.sessionDate || "").slice(0, 10),
+          startTime: body.startTime,
+          endTime: body.endTime || "11:00",
+          reason: errMsg.includes("Double-booking")
+            ? errMsg
+            : "Trainer unavailable or has a schedule conflict during the requested time slot.",
+          paymentProtected: true,
+          status: "declined",
+          createdAt: new Date().toISOString(),
+        });
+
+        throw new Error(declineMessage);
+      }
+
+      // If backend network error / local demo fallback:
+      const storedBookings = this.getStoredBookings();
+      const dateStr = (body.sessionDate || "").slice(0, 10);
+      const reqStart = body.startTime;
+      const reqEnd = body.endTime || "11:00";
+
+      // 1. Check coach working hours (08:00 - 18:00)
+      if (reqStart < "08:00" || reqEnd > "18:00") {
+        this.saveDeclinedConflict({
+          id: `conflict-${Date.now()}`,
+          trainerId: body.trainerId,
+          trainerName: body.trainerName || "Coach",
+          memberId: body.memberId,
+          memberName: body.memberName || "Athlete",
+          sessionDate: dateStr,
+          startTime: reqStart,
+          endTime: reqEnd,
+          reason: `Requested time slot (${reqStart} - ${reqEnd}) is outside standard coach working hours (08:00 - 18:00).`,
+          paymentProtected: true,
+          status: "declined",
+          createdAt: new Date().toISOString(),
+        });
+        throw new Error(declineMessage);
+      }
+
+      // 2. Prevent Double Booking: Check existing bookings for this trainer on the same date
+      const conflict = storedBookings.find((b: any) => {
+        const bDate = (b.sessionDate || "").slice(0, 10);
+        const isSameTrainer =
+          (body.trainerId && (b.trainerId === body.trainerId || b.trainer?.id === body.trainerId)) ||
+          (body.trainerUserId && (b.trainerUserId === body.trainerUserId || b.trainer?.userId === body.trainerUserId)) ||
+          (body.trainerEmail && (b.trainerEmail === body.trainerEmail || b.trainer?.email === body.trainerEmail));
+        const isActive = b.status === "confirmed" || b.status === "pending" || b.status === "approved";
+        if (!isSameTrainer || !isActive || bDate !== dateStr) return false;
+
+        const bEnd = b.endTime || "11:00";
+        // Overlap formula: existing.startTime < requested.endTime && existing.endTime > requested.startTime
+        return b.startTime < reqEnd && bEnd > reqStart;
+      });
+
+      if (conflict) {
+        this.saveDeclinedConflict({
+          id: `conflict-${Date.now()}`,
+          trainerId: body.trainerId,
+          trainerName: body.trainerName || "Coach",
+          memberId: body.memberId,
+          memberName: body.memberName || "Athlete",
+          sessionDate: dateStr,
+          startTime: reqStart,
+          endTime: reqEnd,
+          reason: `Double-booking conflict prevented: Coach already has an active reservation from ${conflict.startTime} to ${conflict.endTime || "11:00"}.`,
+          paymentProtected: true,
+          status: "declined",
+          createdAt: new Date().toISOString(),
+        });
+
+        // Payment Protection: coins balance remained untouched
+        throw new Error(declineMessage);
+      }
+
+      // Payment Protection: Deduct coins only after local validation confirms trainer is available!
+      if (isCoins) {
+        const currentCoins = this.getMemberCoins(body.memberId);
+        this.setMemberCoins(Math.max(0, currentCoins - coinsRequired), body.memberId);
+      }
+
       const bookingId = `book-${Date.now()}`;
       const newBooking = {
         id: bookingId,
@@ -1283,21 +1418,187 @@ class ApiClient {
     }
   }
 
-  async updateBookingStatus(bookingId: string, status: string): Promise<any> {
+  async updateBookingStatus(bookingId: string, status: string, reason?: string): Promise<any> {
     try {
       return await this.request(`/bookings/${bookingId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, reason }),
       });
     } catch {
       const stored = this.getStoredBookings();
       const idx = stored.findIndex((b) => b.id === bookingId);
       if (idx !== -1) {
+        const booking = stored[idx];
         stored[idx].status = status;
+        if (reason) {
+          stored[idx].notes = `Declined by trainer: ${reason}`;
+        }
         localStorage.setItem("apex_trainer_bookings", JSON.stringify(stored));
+
+        // If status is "declined", guarantee Payment Protection & Refund
+        if (status === "declined") {
+          const isCoins = booking.paymentMethod === "coins" || booking.coinsPaid !== undefined;
+          if (isCoins && booking.memberId) {
+            const coinsToRefund = Number(booking.coinsPaid || this.calculateTrainerCoins(booking.price || 75));
+            const currentCoins = this.getMemberCoins(booking.memberId);
+            this.setMemberCoins(currentCoins + coinsToRefund, booking.memberId);
+
+            MOCK_NOTIFICATIONS.unshift({
+              id: `notif-refund-${Date.now()}`,
+              userId: booking.memberId,
+              title: "Payment Refunded: Trainer Unavailable",
+              message: `Your session on ${booking.sessionDate} was declined by the trainer (${reason || "Trainer unavailable"}). ${coinsToRefund} Loyalty Coins were refunded to your account.`,
+              type: "reward",
+              isRead: false,
+              createdAt: new Date().toISOString(),
+            });
+          }
+
+          // Record declined booking in Admin Monitoring
+          this.saveDeclinedConflict({
+            id: `declined-${Date.now()}`,
+            trainerId: booking.trainerId,
+            trainerName: booking.trainerName || (booking.trainer?.user ? `Coach ${booking.trainer.user.firstName} ${booking.trainer.user.lastName}` : "Coach"),
+            memberId: booking.memberId,
+            memberName: booking.memberName || (booking.member?.user ? `${booking.member.user.firstName} ${booking.member.user.lastName}` : "Athlete"),
+            sessionDate: booking.sessionDate,
+            startTime: booking.startTime,
+            endTime: booking.endTime || "11:00",
+            reason: reason ? `Declined by trainer: ${reason}` : "Trainer unavailable for this appointment.",
+            paymentProtected: true,
+            status: "declined",
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
       return { success: true };
     }
+  }
+
+  async getTrainerAvailability(
+    trainerId: string,
+    sessionDate: string,
+    startTime?: string,
+    endTime?: string
+  ): Promise<{
+    trainerId: string;
+    sessionDate: string;
+    workingHours: { startTime: string; endTime: string };
+    bookedSlots: { startTime: string; endTime: string; status: string }[];
+    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" }[];
+    alternativeTrainers: { id: string; name: string; specialization: string; hourlyRate: number; rating: number; avatarUrl?: string }[];
+  }> {
+    const dateStr = sessionDate.slice(0, 10);
+    try {
+      const q = new URLSearchParams({ date: dateStr });
+      if (startTime) q.append("startTime", startTime);
+      if (endTime) q.append("endTime", endTime);
+      const res = await this.request<any>(`/bookings/trainers/${trainerId}/availability?${q.toString()}`);
+      if (res && res.slots) return res;
+    } catch {}
+
+    // Fallback using stored bookings
+    const storedBookings = this.getStoredBookings();
+    const activeOnDate = storedBookings.filter((b: any) => {
+      const bDate = (b.sessionDate || "").slice(0, 10);
+      const isSameTrainer =
+        b.trainerId === trainerId ||
+        b.trainer?.id === trainerId ||
+        b.trainerUserId === trainerId;
+      const isActive = b.status === "confirmed" || b.status === "pending" || b.status === "approved";
+      return isSameTrainer && isActive && bDate === dateStr;
+    });
+
+    const standardSlots = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    const slots = standardSlots.map((slot) => {
+      const [h, m] = slot.split(":");
+      const slotEnd = `${(parseInt(h, 10) + 1).toString().padStart(2, "0")}:${m}`;
+      const conflict = activeOnDate.find((b: any) => slot < (b.endTime || "11:00") && slotEnd > b.startTime);
+      return {
+        startTime: slot,
+        endTime: slotEnd,
+        isAvailable: !conflict,
+        status: (conflict ? "booked" : "available") as "available" | "booked" | "outside_hours",
+      };
+    });
+
+    // Query alternative available trainers on this date & time
+    const targetStart = startTime || "10:00";
+    const targetEnd = endTime || "11:00";
+    const allTrainers = await this.listTrainers();
+    const alternativeTrainers = allTrainers
+      .filter((t: any) => {
+        if (t.id === trainerId) return false;
+        const hasConflict = storedBookings.some((b: any) => {
+          const bDate = (b.sessionDate || "").slice(0, 10);
+          const isT = b.trainerId === t.id || b.trainer?.id === t.id || b.trainerUserId === t.id;
+          const isActive = b.status === "confirmed" || b.status === "pending" || b.status === "approved";
+          return isT && isActive && bDate === dateStr && b.startTime < targetEnd && (b.endTime || "11:00") > targetStart;
+        });
+        return !hasConflict;
+      })
+      .slice(0, 4)
+      .map((t: any) => ({
+        id: t.id,
+        name: `Coach ${t.user?.firstName || "Trainer"} ${t.user?.lastName || ""}`,
+        specialization: t.specialization || "Strength & Conditioning",
+        hourlyRate: Number(t.hourlyRate || 75),
+        rating: Number(t.rating || 4.9),
+        avatarUrl: t.user?.avatarUrl,
+      }));
+
+    return {
+      trainerId,
+      sessionDate: dateStr,
+      workingHours: { startTime: "08:00", endTime: "18:00" },
+      bookedSlots: activeOnDate.map((b: any) => ({
+        startTime: b.startTime,
+        endTime: b.endTime || "11:00",
+        status: b.status,
+      })),
+      slots,
+      alternativeTrainers,
+    };
+  }
+
+  async listScheduleConflicts(): Promise<{
+    conflicts: any[];
+    declinedBookings: any[];
+  }> {
+    try {
+      const res = await this.request<any>("/bookings/conflicts");
+      if (res && (res.conflicts || res.declinedBookings)) {
+        const local = this.getDeclinedConflicts();
+        const combinedConflicts = [
+          ...local,
+          ...(res.conflicts || []).map((c: any) => ({
+            id: c.id,
+            trainerId: c.details?.trainerId,
+            trainerName: c.details?.trainerName || "Trainer",
+            memberId: c.userId,
+            memberName: c.user ? `${c.user.firstName} ${c.user.lastName}` : "Athlete",
+            sessionDate: c.details?.sessionDate,
+            startTime: c.details?.startTime,
+            endTime: c.details?.endTime,
+            reason: c.details?.reason || "Double booking conflict prevented",
+            paymentProtected: true,
+            status: "declined",
+            createdAt: c.timestamp,
+          })),
+        ];
+        return {
+          conflicts: combinedConflicts,
+          declinedBookings: res.declinedBookings || [],
+        };
+      }
+    } catch {}
+
+    const localConflicts = this.getDeclinedConflicts();
+    const stored = this.getStoredBookings().filter((b) => b.status === "declined");
+    return {
+      conflicts: localConflicts,
+      declinedBookings: stored,
+    };
   }
 
   // PAYMENTS & BILLING

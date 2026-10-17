@@ -48,6 +48,7 @@ enum BookingStatus {
   completed
   cancelled
   no_show
+  declined
 }
 
 enum PaymentStatus {

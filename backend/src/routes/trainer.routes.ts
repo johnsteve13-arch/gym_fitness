@@ -6,6 +6,7 @@ import { isStaffOrAdmin } from "../middleware/role.middleware";
 const router = Router();
 
 router.get("/", BookingController.listTrainers);
+router.get("/:id/availability", BookingController.getTrainerAvailability);
 
 router.use(authenticate);
 

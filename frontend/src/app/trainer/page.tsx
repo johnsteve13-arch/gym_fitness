@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
 import {
   Dumbbell,
   Users,
@@ -24,6 +25,9 @@ import {
   RefreshCw,
   UserCheck,
   Award,
+  XCircle,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function TrainerDashboardPage() {
@@ -34,7 +38,13 @@ export default function TrainerDashboardPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [actionSuccess, setActionSuccess] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed">("all");
+  const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed" | "declined">("all");
+
+  // Decline Booking Modal State
+  const [bookingToDecline, setBookingToDecline] = useState<any | null>(null);
+  const [declineReasonPreset, setDeclineReasonPreset] = useState<string>("schedule_conflict");
+  const [customDeclineReason, setCustomDeclineReason] = useState<string>("");
+  const [isDeclining, setIsDeclining] = useState<boolean>(false);
 
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -383,6 +393,51 @@ export default function TrainerDashboardPage() {
     }
   };
 
+  const handleDeclineBooking = async () => {
+    if (!bookingToDecline) return;
+    setIsDeclining(true);
+    try {
+      const presetLabels: Record<string, string> = {
+        schedule_conflict: "Trainer unavailable: Schedule conflict / overlapping commitment",
+        fully_booked: "Trainer unavailable: Fully booked for this hour",
+        off_duty: "Trainer unavailable: Off-duty / outside coaching shift",
+        personal_emergency: "Trainer unavailable: Personal emergency or illness",
+        custom: customDeclineReason.trim() || "Trainer unavailable at this time",
+      };
+
+      const finalReason =
+        declineReasonPreset === "custom"
+          ? customDeclineReason.trim() || "Trainer unavailable at this time"
+          : presetLabels[declineReasonPreset];
+
+      await api.updateBookingStatus(bookingToDecline.id, "declined", finalReason);
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === bookingToDecline.id
+            ? { ...s, status: "declined", notes: `Declined by trainer: ${finalReason}` }
+            : s
+        )
+      );
+
+      const athleteName =
+        bookingToDecline.member?.user
+          ? `${bookingToDecline.member.user.firstName} ${bookingToDecline.member.user.lastName || ""}`.trim()
+          : bookingToDecline.memberName || "Athlete";
+
+      setActionSuccess(
+        `Workout booking for ${athleteName} declined. The member was notified in real-time and any payment/coins were reversed.`
+      );
+      setBookingToDecline(null);
+      setCustomDeclineReason("");
+      setTimeout(() => setActionSuccess(""), 6000);
+    } catch (err: any) {
+      alert(err.message || "Failed to decline booking.");
+    } finally {
+      setIsDeclining(false);
+    }
+  };
+
   const displayName = currentUser?.firstName
     ? `Coach ${currentUser.firstName} ${currentUser.lastName || ""}`
     : "Certified Coach";
@@ -395,12 +450,14 @@ export default function TrainerDashboardPage() {
     )
   ).filter(Boolean).length;
 
-  const confirmedSessions = sessions.filter((s) => s.status !== "completed");
+  const confirmedSessions = sessions.filter((s) => s.status === "confirmed" || s.status === "pending");
   const completedCount = sessions.filter((s) => s.status === "completed").length;
+  const declinedCount = sessions.filter((s) => s.status === "declined").length;
 
   const filteredSessions = sessions.filter((s) => {
-    if (filterTab === "confirmed") return s.status !== "completed";
+    if (filterTab === "confirmed") return s.status === "confirmed" || s.status === "pending";
     if (filterTab === "completed") return s.status === "completed";
+    if (filterTab === "declined") return s.status === "declined";
     return true;
   });
 
@@ -529,6 +586,15 @@ export default function TrainerDashboardPage() {
                 >
                   Done ({completedCount})
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTab("declined")}
+                  className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                    filterTab === "declined" ? "bg-rose-950/80 text-rose-300 border border-rose-500/30" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Declined ({declinedCount})
+                </button>
               </div>
 
               <Button size="sm" variant="ghost" onClick={loadData} title="Refresh bookings list">
@@ -554,6 +620,7 @@ export default function TrainerDashboardPage() {
             <div className="divide-y divide-slate-800/80">
               {filteredSessions.map((s) => {
                 const isDone = s.status === "completed";
+                const isDeclined = s.status === "declined";
                 const athleteName = s.member?.user
                   ? `${s.member.user.firstName} ${s.member.user.lastName || ""}`.trim()
                   : (s.memberName || "Registered Athlete");
@@ -586,8 +653,20 @@ export default function TrainerDashboardPage() {
                           <Badge variant="neutral" className="font-mono text-[10px]">
                             {athleteCode}
                           </Badge>
-                          <Badge variant={isDone ? "success" : "info"}>
-                            {isDone ? "Completed" : (s.status || "Confirmed")}
+                          <Badge
+                            variant={
+                              isDone
+                                ? "success"
+                                : isDeclined
+                                ? "danger"
+                                : "info"
+                            }
+                          >
+                            {isDone
+                              ? "Completed"
+                              : isDeclined
+                              ? "Declined (Unavailable)"
+                              : (s.status || "Confirmed")}
                           </Badge>
                           <Badge variant="emerald" className="text-[10px]">
                             {sessionFocus}
@@ -615,7 +694,9 @@ export default function TrainerDashboardPage() {
                           </div>
                           <div className="text-slate-400 font-medium">
                             Payment:{" "}
-                            {s.paymentMethod === "coins" || s.coinsPaid ? (
+                            {isDeclined ? (
+                              <span className="text-emerald-400 font-bold">100% Refunded / Protected</span>
+                            ) : s.paymentMethod === "coins" || s.coinsPaid ? (
                               <span className="text-amber-400 font-bold">
                                 🪙 {s.coinsPaid || api.calculateTrainerCoins(s.price || 75)} Coins (Redeemed)
                               </span>
@@ -649,26 +730,51 @@ export default function TrainerDashboardPage() {
                         )}
 
                         {s.notes && (
-                          <div className="text-xs text-slate-300 bg-slate-950/70 p-3 rounded-lg border border-slate-800/80 mt-2 max-w-2xl">
+                          <div className={`text-xs p-3 rounded-lg border mt-2 max-w-2xl ${
+                            isDeclined
+                              ? "bg-rose-950/30 border-rose-900/40 text-rose-200"
+                              : "bg-slate-950/70 border-slate-800/80 text-slate-300"
+                          }`}>
                             <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                              <Target className="w-3 h-3 text-emerald-400" />
-                              <span>Athlete Goals & Session Focus:</span>
+                              {isDeclined ? (
+                                <AlertTriangle className="w-3 h-3 text-rose-400" />
+                              ) : (
+                                <Target className="w-3 h-3 text-emerald-400" />
+                              )}
+                              <span>{isDeclined ? "Decline Note & Reason:" : "Athlete Goals & Session Focus:"}</span>
                             </div>
-                            <p className="text-slate-300 italic">&ldquo;{s.notes}&rdquo;</p>
+                            <p className="italic">&ldquo;{s.notes}&rdquo;</p>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0 self-end lg:self-center">
-                      {!isDone ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleComplete(s.id, athleteName)}
-                          leftIcon={<CheckCircle className="w-4 h-4" />}
-                        >
-                          Mark Completed
-                        </Button>
+                    <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
+                      {!isDone && !isDeclined ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => handleComplete(s.id, athleteName)}
+                            leftIcon={<CheckCircle className="w-4 h-4" />}
+                            className="font-bold"
+                          >
+                            Mark Completed
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => setBookingToDecline(s)}
+                            leftIcon={<XCircle className="w-4 h-4" />}
+                            className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 font-semibold"
+                          >
+                            Decline (Unavailable)
+                          </Button>
+                        </>
+                      ) : isDeclined ? (
+                        <Badge variant="danger" className="py-1.5 px-3 text-xs flex items-center gap-1.5 font-semibold">
+                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Declined • Slot Freed</span>
+                        </Badge>
                       ) : (
                         <Badge variant="success" className="py-1.5 px-3.5 text-xs flex items-center gap-1.5">
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
@@ -682,6 +788,117 @@ export default function TrainerDashboardPage() {
             </div>
           )}
         </Card>
+
+        {/* DECLINE BOOKING MODAL */}
+        {bookingToDecline && (() => {
+          const athleteName = bookingToDecline.member?.user
+            ? `${bookingToDecline.member.user.firstName} ${bookingToDecline.member.user.lastName || ""}`.trim()
+            : (bookingToDecline.memberName || "Athlete");
+          const isCoins = bookingToDecline.paymentMethod === "coins" || bookingToDecline.coinsPaid !== undefined;
+          const coinsAmount = bookingToDecline.coinsPaid || api.calculateTrainerCoins(bookingToDecline.price || 75);
+
+          return (
+            <Modal
+              isOpen={true}
+              onClose={() => {
+                if (!isDeclining) setBookingToDecline(null);
+              }}
+              title="Decline Member Workout Booking"
+              maxWidth="md"
+            >
+              <div className="space-y-4">
+                <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-700/50 text-rose-200 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <p>
+                    Are you unavailable for this workout appointment? Declining will immediately notify{" "}
+                    <strong className="text-white">{athleteName}</strong>, free your schedule slot in real-time, and guarantee 100% payment protection.
+                  </p>
+                </div>
+
+                {/* Booking Summary */}
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Athlete:</span>
+                    <strong className="text-white">{athleteName}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Session Slot:</span>
+                    <strong className="text-white">
+                      📅 {bookingToDecline.sessionDate} • ⏰ {bookingToDecline.startTime} – {bookingToDecline.endTime}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Workout Focus:</span>
+                    <span className="text-slate-300 truncate max-w-[200px]">{bookingToDecline.sessionType || "1-on-1 Workout"}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400 border-t border-slate-900 pt-1.5">
+                    <span>Payment Protection:</span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      {isCoins ? `Refund ${coinsAmount} Coins to Member` : "Direct Payment Reversed (₱0 Charged)"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Decline Reason Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Select Reason for Unavailability
+                  </label>
+                  <select
+                    value={declineReasonPreset}
+                    onChange={(e) => setDeclineReasonPreset(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-rose-500"
+                  >
+                    <option value="schedule_conflict">Unavailable: Personal schedule conflict / overlapping commitment</option>
+                    <option value="fully_booked">Unavailable: Fully booked for this hour</option>
+                    <option value="off_duty">Unavailable: Off-duty / outside coaching shift</option>
+                    <option value="personal_emergency">Unavailable: Personal emergency or illness</option>
+                    <option value="custom">Other / Custom reason...</option>
+                  </select>
+                </div>
+
+                {declineReasonPreset === "custom" && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Custom Reason / Note for Athlete
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customDeclineReason}
+                      onChange={(e) => setCustomDeclineReason(e.target.value)}
+                      placeholder="Provide context on your unavailability..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-rose-500"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setBookingToDecline(null)}
+                    disabled={isDeclining}
+                  >
+                    Keep Booking
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    onClick={handleDeclineBooking}
+                    isLoading={isDeclining}
+                    className="bg-rose-600 hover:bg-rose-500 font-bold shadow-md shadow-rose-950/40"
+                  >
+                    Confirm & Decline Booking
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
       </div>
     </div>
   );

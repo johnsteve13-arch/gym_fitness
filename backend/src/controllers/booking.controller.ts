@@ -22,19 +22,27 @@ export class BookingController {
       const memberId = req.body.memberId || req.user?.memberId;
       if (!memberId) return sendError(res, "Member ID is required", 400);
 
+      const ipAddress = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "";
+      const userAgent = req.headers["user-agent"] || "";
+
       const booking = await BookingService.createBooking({
         ...req.body,
         memberId,
+        ipAddress,
+        userAgent,
       });
 
       await recordAuditLog(req, "TRAINER_BOOKING_CREATED", "trainer_bookings", booking.id, {
         trainerId: booking.trainerId,
         sessionDate: booking.sessionDate,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
       });
 
       return sendSuccess(res, booking, "Trainer session booked. Please complete payment within 30 minutes to confirm.", 201);
     } catch (err: any) {
-      return sendError(res, err.message, 400);
+      const statusCode = err.statusCode || (err.message.includes("Booking Declined") ? 409 : 400);
+      return sendError(res, err.message, statusCode);
     }
   }
 
@@ -53,9 +61,10 @@ export class BookingController {
 
   static async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const { status } = req.body;
-      const updated = await BookingService.updateBookingStatus(req.params.id, status);
-      await recordAuditLog(req, "TRAINER_BOOKING_STATUS_CHANGED", "trainer_bookings", req.params.id, { status });
+      const { status, reason } = req.body;
+      const updated = await BookingService.updateBookingStatus(req.params.id, status, reason);
+      const action = status === "declined" ? "TRAINER_DECLINED_BOOKING" : "TRAINER_BOOKING_STATUS_CHANGED";
+      await recordAuditLog(req, action, "trainer_bookings", req.params.id, { status, reason });
       return sendSuccess(res, updated, `Booking marked as ${status}`);
     } catch (err: any) {
       return sendError(res, err.message, 400);
@@ -99,6 +108,35 @@ export class BookingController {
       return sendSuccess(res, result, "Trainer registration confirmed.");
     } catch (err: any) {
       return sendError(res, err.message, 400);
+    }
+  }
+
+  static async getTrainerAvailability(req: Request, res: Response, next: NextFunction) {
+    try {
+      const trainerId = req.params.id;
+      const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const startTime = req.query.startTime as string;
+      const endTime = req.query.endTime as string;
+
+      const availability = await BookingService.getTrainerAvailability({
+        trainerId,
+        sessionDate: date,
+        startTime,
+        endTime,
+      });
+
+      return sendSuccess(res, availability);
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
+
+  static async listScheduleConflicts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const conflicts = await BookingService.listScheduleConflicts();
+      return sendSuccess(res, conflicts);
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
     }
   }
 }

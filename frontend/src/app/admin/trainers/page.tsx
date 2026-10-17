@@ -23,6 +23,9 @@ import {
   Award,
   Sparkles,
   Clock,
+  ShieldCheck,
+  ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 
 const SPECIALIZATION_PRESETS = [
@@ -65,8 +68,27 @@ export default function AdminTrainersPage() {
     password: "Password@123",
   });
 
-  const [statusTab, setStatusTab] = useState<"all" | "active" | "pending">("all");
+  const [statusTab, setStatusTab] = useState<"all" | "active" | "pending" | "conflicts">("all");
   const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  // Admin Monitoring: Schedule Conflicts & Declined Attempts
+  const [conflictsData, setConflictsData] = useState<{ conflicts: any[]; declinedBookings: any[] }>({
+    conflicts: [],
+    declinedBookings: [],
+  });
+  const [loadingConflicts, setLoadingConflicts] = useState(false);
+
+  const loadConflicts = async () => {
+    setLoadingConflicts(true);
+    try {
+      const data = await api.listScheduleConflicts();
+      setConflictsData(data);
+    } catch (e) {
+      console.warn("Failed to load schedule conflicts:", e);
+    } finally {
+      setLoadingConflicts(false);
+    }
+  };
 
   const loadTrainers = async () => {
     setLoading(true);
@@ -97,6 +119,7 @@ export default function AdminTrainersPage() {
 
   useEffect(() => {
     loadTrainers();
+    loadConflicts();
   }, []);
 
   const handleAddTrainer = async (e: React.FormEvent) => {
@@ -247,7 +270,7 @@ export default function AdminTrainersPage() {
       )}
 
       {/* Quick Metrics Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="glass-card border-slate-800 p-4">
           <div className="flex items-center justify-between text-xs text-slate-400">
             <span>Total Registered Coaches</span>
@@ -276,6 +299,28 @@ export default function AdminTrainersPage() {
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
             {pendingTrainers.length > 0 ? "Requires admin confirmation" : "No pending applications"}
+          </div>
+        </Card>
+
+        <Card
+          className={`glass-card p-4 transition cursor-pointer ${
+            conflictsData.conflicts.length > 0
+              ? "border-rose-500/50 bg-rose-950/20 hover:border-rose-400"
+              : "border-slate-800"
+          }`}
+          onClick={() => setStatusTab("conflicts")}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span className={conflictsData.conflicts.length > 0 ? "text-rose-300 font-semibold" : ""}>
+              Conflicts Prevented
+            </span>
+            <ShieldAlert className={`w-4 h-4 ${conflictsData.conflicts.length > 0 ? "text-rose-400" : "text-slate-500"}`} />
+          </div>
+          <div className={`mt-2 text-2xl font-black ${conflictsData.conflicts.length > 0 ? "text-rose-400" : "text-slate-400"}`}>
+            {conflictsData.conflicts.length}
+          </div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            {conflictsData.conflicts.length > 0 ? "Double-booking guard active" : "Zero active conflicts"}
           </div>
         </Card>
 
@@ -417,9 +462,121 @@ export default function AdminTrainersPage() {
             </Badge>
           )}
         </button>
+        <button
+          onClick={() => setStatusTab("conflicts")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+            statusTab === "conflicts"
+              ? "bg-rose-950/80 text-rose-300 border border-rose-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+          <span>Schedule Conflicts & Declines</span>
+          {conflictsData.conflicts.length > 0 && (
+            <Badge variant="danger" className="text-[10px] py-0 px-1.5 font-mono">
+              {conflictsData.conflicts.length}
+            </Badge>
+          )}
+        </button>
       </div>
 
-      {/* Search & Filter Toolbar */}
+      {/* Main Content: Conflicts Monitor or Trainers Catalog */}
+      {statusTab === "conflicts" ? (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 border border-slate-800">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                <span>Trainer Schedule Conflict & Double-Booking Audit Log</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Real-time admin monitoring of declined booking transactions, overlap interceptions, and payment protections
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={loadConflicts}
+              isLoading={loadingConflicts}
+              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+              className="text-xs shrink-0"
+            >
+              Sync Conflicts
+            </Button>
+          </div>
+
+          {conflictsData.conflicts.length === 0 ? (
+            <Card className="glass-card border-slate-800 p-12 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-bold text-white mb-1">No Scheduling Conflicts Recorded</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                All booking transactions have proceeded cleanly without collisions. The system automatically intercepts overlapping requests and protects payments.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {conflictsData.conflicts.map((conflict: any, index: number) => (
+                <Card
+                  key={conflict.id || index}
+                  className="glass-card border-rose-900/40 bg-slate-900/60 p-4 space-y-3 hover:border-rose-700/60 transition shadow-lg"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="danger" className="text-[10px] font-mono">
+                        Double-Booking Prevented
+                      </Badge>
+                      <span className="text-xs font-bold text-white">
+                        {conflict.memberName} → Coach {conflict.trainerName}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      {new Date(conflict.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
+                        Requested Session Slot
+                      </span>
+                      <span className="font-semibold text-white mt-0.5 block">
+                        📅 {conflict.sessionDate} • ⏰ {conflict.startTime} – {conflict.endTime}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
+                        Payment Protection Status
+                      </span>
+                      <span className="font-semibold text-emerald-400 mt-0.5 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" /> 100% Protected (₱0.00 / 0 Coins)
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
+                        Interception Action
+                      </span>
+                      <span className="font-semibold text-rose-300 mt-0.5 block">
+                        Auto-Declined by System
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-900/30 text-xs text-rose-200">
+                    <strong className="font-bold text-rose-100">Conflict Reason: </strong>
+                    {conflict.reason || "Coach already had an active reservation or conflict during this time slot."}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Search & Filter Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -602,6 +759,8 @@ export default function AdminTrainersPage() {
             </Card>
           ))}
         </div>
+      )}
+        </>
       )}
 
       {/* ================= ADD TRAINER MODAL ================= */}

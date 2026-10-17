@@ -25,6 +25,10 @@ import {
   Target,
   Flame,
   Award,
+  AlertTriangle,
+  Lock,
+  RefreshCw,
+  Zap,
 } from "lucide-react";
 
 export default function MemberTrainersPage() {
@@ -46,6 +50,27 @@ export default function MemberTrainersPage() {
   const [actionSuccess, setActionSuccess] = useState("");
   const [myBookings, setMyBookings] = useState<any[]>([]);
 
+  // Real-Time Availability & Slot Checking State
+  const [availabilityData, setAvailabilityData] = useState<{
+    workingHours: { startTime: string; endTime: string };
+    bookedSlots: { startTime: string; endTime: string; status: string }[];
+    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" }[];
+    alternativeTrainers: any[];
+  } | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
+  // Declined Booking Modal State (Alternatives & Payment Protection)
+  const [declinedModalOpen, setDeclinedModalOpen] = useState(false);
+  const [declinedInfo, setDeclinedInfo] = useState<{
+    trainer: Trainer;
+    date: string;
+    startTime: string;
+    endTime: string;
+    message: string;
+    availableSlots: string[];
+    alternativeTrainers: any[];
+  } | null>(null);
+
   const loadBookings = async () => {
     const currentUser = api.getCurrentUser();
     const storedMembers = api.getStoredMembers();
@@ -59,11 +84,47 @@ export default function MemberTrainersPage() {
     setCoinBalance(api.getMemberCoins(memberId));
   };
 
+  const fetchAvailability = async (trainerId: string, date: string, time?: string) => {
+    setLoadingAvailability(true);
+    try {
+      const data = await api.getTrainerAvailability(trainerId, date, time);
+      setAvailabilityData(data);
+    } catch (e) {
+      console.warn("Failed to fetch trainer availability:", e);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
   useEffect(() => {
     api.listTrainers().then(setTrainers);
     loadBookings();
     setCoinBalance(api.getMemberCoins());
   }, []);
+
+  // Real-Time Availability fetch whenever selected trainer or date changes
+  useEffect(() => {
+    if (selectedTrainer) {
+      fetchAvailability(selectedTrainer.id, sessionDate, startTime);
+    } else {
+      setAvailabilityData(null);
+    }
+  }, [selectedTrainer?.id, sessionDate]);
+
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm("Are you sure you want to cancel this booking? The trainer's slot will be freed immediately in real-time.")) return;
+    try {
+      await api.updateBookingStatus(bookingId, "cancelled");
+      await loadBookings();
+      if (selectedTrainer) {
+        await fetchAvailability(selectedTrainer.id, sessionDate, startTime);
+      }
+      setActionSuccess("Booking cancelled. The trainer's schedule has been freed in real-time.");
+      setTimeout(() => setActionSuccess(""), 5000);
+    } catch (e: any) {
+      alert(e.message || "Failed to cancel booking.");
+    }
+  };
 
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +137,10 @@ export default function MemberTrainersPage() {
     }
 
     setSubmitting(true);
+    const [hours, minutes] = startTime.split(":");
+    const endHour = ((parseInt(hours, 10) + 1) % 24).toString().padStart(2, "0");
+    const endTime = `${endHour}:${minutes || "00"}`;
+
     try {
       const currentUser = api.getCurrentUser();
       const storedMembers = api.getStoredMembers();
@@ -83,10 +148,6 @@ export default function MemberTrainersPage() {
         storedMembers.find(
           (m) => m.userId === currentUser?.id || m.user?.email.toLowerCase() === currentUser?.email.toLowerCase()
         ) || storedMembers[0];
-
-      const [hours, minutes] = startTime.split(":");
-      const endHour = ((parseInt(hours, 10) + 1) % 24).toString().padStart(2, "0");
-      const endTime = `${endHour}:${minutes || "00"}`;
 
       const finalWorkoutType = targetWorkout ? `${targetWorkout} (${sessionType})` : sessionType;
       const combinedNotes = targetWorkout
@@ -126,12 +187,48 @@ export default function MemberTrainersPage() {
         );
       }
 
+      // Real-time Availability update
+      await loadBookings();
+      if (selectedTrainer) {
+        await fetchAvailability(selectedTrainer.id, sessionDate, startTime);
+      }
+
       setSelectedTrainer(null);
       setNotes("");
-      await loadBookings();
       setTimeout(() => setActionSuccess(""), 6000);
     } catch (err: any) {
-      alert(err.message || "Failed to complete reservation.");
+      const errMsg = err?.message || "";
+      const isDeclined =
+        errMsg.includes("Booking Declined") ||
+        errMsg.includes("unavailable") ||
+        errMsg.includes("conflict") ||
+        errMsg.includes("reservation") ||
+        errMsg.includes("outside");
+
+      if (isDeclined) {
+        // Collect alternative slots & coaches from current availability
+        const openSlots = availabilityData?.slots?.filter((s) => s.isAvailable).map((s) => s.startTime) || [];
+        const altTrainers = availabilityData?.alternativeTrainers || [];
+
+        setDeclinedInfo({
+          trainer: selectedTrainer,
+          date: sessionDate,
+          startTime,
+          endTime,
+          message: "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot.",
+          availableSlots: openSlots,
+          alternativeTrainers: altTrainers,
+        });
+
+        // Close booking modal and pop declined conflict modal
+        setSelectedTrainer(null);
+        setDeclinedModalOpen(true);
+
+        // Update bookings and availability in real-time
+        loadBookings();
+      } else {
+        alert(err.message || "Failed to complete reservation.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -334,10 +431,32 @@ export default function MemberTrainersPage() {
                       <span className="font-bold text-white text-sm">
                         {b.trainerName || (b.trainer?.user ? `Coach ${b.trainer.user.firstName} ${b.trainer.user.lastName}` : "Certified Coach")}
                       </span>
-                      <Badge variant={b.status === "completed" ? "neutral" : "success"} className="text-[10px]">
-                        {b.status === "completed" ? "Completed" : "Confirmed"}
+                      <Badge
+                        variant={
+                          b.status === "completed"
+                            ? "neutral"
+                            : b.status === "declined"
+                            ? "danger"
+                            : b.status === "cancelled"
+                            ? "warning"
+                            : "success"
+                        }
+                        className="text-[10px]"
+                      >
+                        {b.status === "completed"
+                          ? "Completed"
+                          : b.status === "declined"
+                          ? "Declined (Conflict Prevented)"
+                          : b.status === "cancelled"
+                          ? "Cancelled"
+                          : "Confirmed"}
                       </Badge>
-                      {isCoins ? (
+                      {b.status === "declined" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Payment Protected</span>
+                        </span>
+                      ) : isCoins ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
                           <Award className="w-3 h-3" />
                           <span>Paid with Coins</span>
@@ -358,13 +477,20 @@ export default function MemberTrainersPage() {
 
                     {b.notes && (
                       <div className="text-[11px] text-slate-400 italic">
-                        Focus: {b.notes}
+                        {b.status === "declined" ? `Reason: ${b.notes}` : `Focus: ${b.notes}`}
                       </div>
                     )}
                   </div>
 
                   <div className="text-right shrink-0">
-                    {isCoins ? (
+                    {b.status === "declined" ? (
+                      <div>
+                        <span className="text-xs font-mono font-bold text-emerald-400">
+                          ₱0.00 / 0 Coins
+                        </span>
+                        <div className="text-[10px] text-slate-500">No charge</div>
+                      </div>
+                    ) : isCoins ? (
                       <div>
                         <div className="flex items-center justify-end gap-1 text-xs font-black text-amber-400">
                           <Award className="w-3.5 h-3.5" />
@@ -379,6 +505,16 @@ export default function MemberTrainersPage() {
                         </span>
                         <div className="text-[10px] text-slate-500">Reserved</div>
                       </div>
+                    )}
+
+                    {(b.status === "confirmed" || b.status === "pending") && (
+                      <button
+                        type="button"
+                        onClick={() => handleCancelBooking(b.id)}
+                        className="mt-2 text-[10px] text-rose-400 hover:text-rose-300 font-semibold hover:underline block ml-auto transition"
+                      >
+                        Cancel Session
+                      </button>
                     )}
                   </div>
                 </div>
@@ -435,6 +571,75 @@ export default function MemberTrainersPage() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
                     required
                   />
+                </div>
+              </div>
+
+              {/* REAL-TIME AVAILABILITY & INTERACTIVE SLOT SELECTOR */}
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Real-Time Trainer Availability ({sessionDate})</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {loadingAvailability ? (
+                      <span className="text-[10px] text-amber-400 flex items-center gap-1 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> Checking schedule...
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Live Synced
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  Select an open time slot below. Booked slots are locked in real-time to prevent double booking.
+                </p>
+
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  {(availabilityData?.slots || [
+                    { startTime: "08:00", endTime: "09:00", isAvailable: true, status: "available" },
+                    { startTime: "09:00", endTime: "10:00", isAvailable: true, status: "available" },
+                    { startTime: "10:00", endTime: "11:00", isAvailable: true, status: "available" },
+                    { startTime: "11:00", endTime: "12:00", isAvailable: true, status: "available" },
+                    { startTime: "13:00", endTime: "14:00", isAvailable: true, status: "available" },
+                    { startTime: "14:00", endTime: "15:00", isAvailable: true, status: "available" },
+                    { startTime: "15:00", endTime: "16:00", isAvailable: true, status: "available" },
+                    { startTime: "16:00", endTime: "17:00", isAvailable: true, status: "available" },
+                    { startTime: "17:00", endTime: "18:00", isAvailable: true, status: "available" },
+                  ]).map((slot: any) => {
+                    const isSelected = startTime === slot.startTime;
+                    const isBooked = !slot.isAvailable || slot.status === "booked";
+
+                    return (
+                      <button
+                        key={slot.startTime}
+                        type="button"
+                        disabled={isBooked}
+                        onClick={() => setStartTime(slot.startTime)}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center justify-between transition ${
+                          isBooked
+                            ? "bg-slate-950/80 border border-rose-950 text-slate-500 cursor-not-allowed line-through opacity-75"
+                            : isSelected
+                            ? "bg-emerald-500/20 border border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/40"
+                            : "bg-slate-950 border border-slate-800 text-slate-300 hover:border-slate-700"
+                        }`}
+                      >
+                        <span>{slot.startTime}</span>
+                        {isBooked ? (
+                          <span className="text-[9px] text-rose-400 font-sans flex items-center gap-0.5">
+                            <Lock className="w-2.5 h-2.5" /> Booked
+                          </span>
+                        ) : isSelected ? (
+                          <span className="text-[9px] text-emerald-400 font-sans">✓ Picked</span>
+                        ) : (
+                          <span className="text-[9px] text-emerald-500/80 font-sans">Open</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -588,6 +793,143 @@ export default function MemberTrainersPage() {
           </Modal>
         );
       })()}
+
+      {/* BOOKING DECLINED & SUGGESTED ALTERNATIVES MODAL */}
+      {declinedModalOpen && declinedInfo && (
+        <Modal
+          isOpen={true}
+          onClose={() => setDeclinedModalOpen(false)}
+          title="Booking Transaction Declined"
+        >
+          <div className="space-y-4">
+            {/* Clear Notification Banner */}
+            <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-700 text-rose-200 text-xs shadow-lg space-y-2 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-black text-rose-100 text-sm">
+                    Booking Declined
+                  </h4>
+                  <p className="mt-1 font-medium text-rose-200 leading-relaxed">
+                    {declinedInfo.message}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Protection Guarantee Badge */}
+            <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-600/50 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>Payment Protected</span>
+                  <Badge variant="success" className="text-[9px] py-0 px-1.5 font-mono">
+                    ₱0.00 Charged • 0 Coins Deducted
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-emerald-300/90 mt-0.5 leading-snug">
+                  No payment or coins were deducted from your account. Your transaction was safely stopped before any charges could occur.
+                </p>
+              </div>
+            </div>
+
+            {/* Suggest Alternatives */}
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Suggested Alternatives</span>
+              </h4>
+
+              {/* Alternative Open Slots with this Coach */}
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                <span className="text-xs font-bold text-slate-200 block">
+                  Option A: Choose another available time slot with Coach {declinedInfo.trainer.user?.firstName}:
+                </span>
+                {declinedInfo.availableSlots.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {declinedInfo.availableSlots.map((slot) => (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => {
+                          setStartTime(slot);
+                          setSelectedTrainer(declinedInfo.trainer);
+                          setDeclinedModalOpen(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5 transition active:scale-95"
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>
+                          {slot} – {((parseInt(slot.split(":")[0], 10) + 1) % 24).toString().padStart(2, "0")}:{slot.split(":")[1]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 italic">
+                    Coach {declinedInfo.trainer.user?.firstName} has no other open slots on {declinedInfo.date}. Please try another date or switch coaches below.
+                  </p>
+                )}
+              </div>
+
+              {/* Alternative Available Trainers */}
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                <span className="text-xs font-bold text-slate-200 block">
+                  Option B: Select another certified coach available at {declinedInfo.startTime} on {declinedInfo.date}:
+                </span>
+                {declinedInfo.alternativeTrainers.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {declinedInfo.alternativeTrainers.map((alt) => {
+                      const fullAlt = trainers.find((t) => t.id === alt.id);
+                      return (
+                        <div
+                          key={alt.id}
+                          className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 hover:border-emerald-500/50 transition"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate">{alt.name}</div>
+                            <div className="text-[10px] text-emerald-400 truncate">{alt.specialization}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">₱{alt.hourlyRate}/hr</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (fullAlt) {
+                                setSelectedTrainer(fullAlt);
+                              } else {
+                                const found = trainers.find((t) => t.id === alt.id) || null;
+                                setSelectedTrainer(found);
+                              }
+                              setDeclinedModalOpen(false);
+                            }}
+                            className="text-[11px] py-1 px-2.5 font-bold shrink-0"
+                          >
+                            Select Coach
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-400">
+                    Browse other coaches in the catalog above to reserve a session.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeclinedModalOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
