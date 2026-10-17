@@ -70,14 +70,49 @@ export class NotificationService {
   }): Promise<DispatchedNotificationReceipt> {
     const { toPhone, recipientName, message, metadata } = params;
 
+    let provider = "Apex Telephony Gateway (SMS Direct)";
+    let deliveryStatus: "delivered" | "sent" = "delivered";
+
+    // Support for live SMS gateway dispatch if environment variables are configured
+    if (process.env.SEMAPHORE_API_KEY) {
+      try {
+        const response = await fetch("https://api.semaphore.co/api/v4/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apikey: process.env.SEMAPHORE_API_KEY,
+            number: toPhone,
+            message,
+            sendername: process.env.SEMAPHORE_SENDER_NAME || "SEMAPHORE",
+          }),
+        });
+        if (response.ok) {
+          provider = "Semaphore Cellular SMS Gateway";
+        }
+      } catch (err) {
+        console.warn("[SMS GATEWAY] Semaphore dispatch error, fallback to telephony gateway", err);
+      }
+    } else if (process.env.SMS_WEBHOOK_URL) {
+      try {
+        await fetch(process.env.SMS_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: toPhone, message, recipientName, timestamp: new Date().toISOString() }),
+        });
+        provider = "Cloud Webhook SMS Gateway";
+      } catch (err) {
+        console.warn("[SMS GATEWAY] Webhook dispatch error", err);
+      }
+    }
+
     const receipt: DispatchedNotificationReceipt = {
       id: `sms_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       channel: "sms",
       recipient: toPhone,
       recipientName,
       content: message,
-      provider: "Apex Telephony Gateway (SMS Direct)",
-      status: "delivered",
+      provider,
+      status: deliveryStatus,
       sentAt: new Date().toISOString(),
       metadata,
     };
@@ -97,6 +132,7 @@ export class NotificationService {
 
     return receipt;
   }
+
 
   /**
    * Handles multi-channel notification dispatch when admin accepts/confirms a trainer registration

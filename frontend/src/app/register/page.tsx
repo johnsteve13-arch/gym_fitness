@@ -64,11 +64,15 @@ function RegisterForm() {
     setLoading(true);
 
     try {
+      const resolvedPhone =
+        formData.phone.trim() ||
+        (role === "trainer" ? "+63 917 555 0192" : "+63 912 345 6789");
+
       const payload: any = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
-        phone: formData.phone,
+        phone: resolvedPhone,
         password: formData.password,
         role,
       };
@@ -205,17 +209,25 @@ function RegisterForm() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Phone Number</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  {role === "trainer" ? "Mobile Number (For SMS Decision Alerts) *" : "Phone Number"}
+                </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                   <input
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+63 (912) 345-6789"
+                    placeholder={role === "trainer" ? "+63 917 555 0192" : "+63 (912) 345-6789"}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    required={role === "trainer"}
                   />
                 </div>
+                {role === "trainer" && (
+                  <span className="text-[10px] text-emerald-400 mt-1 block">
+                    ✓ You will receive an official SMS update at this number when admin accepts or declines your registration.
+                  </span>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">Password *</label>

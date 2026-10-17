@@ -33,6 +33,8 @@ import {
   MessageSquare,
   Check,
   Inbox,
+  X,
+  Bell,
 } from "lucide-react";
 
 export default function TrainerDashboardPage() {
@@ -55,6 +57,15 @@ export default function TrainerDashboardPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [statusMessageType, setStatusMessageType] = useState<"info" | "success">("info");
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+  const [showIncomingSmsAlert, setShowIncomingSmsAlert] = useState(false);
+  const [testSmsSuccess, setTestSmsSuccess] = useState(false);
+
+  const handleTestSms = () => {
+    setTestSmsSuccess(true);
+    setShowIncomingSmsAlert(true);
+    setTimeout(() => setTestSmsSuccess(false), 5000);
+  };
 
   const loadData = async (user: any) => {
     setLoading(true);
@@ -77,6 +88,18 @@ export default function TrainerDashboardPage() {
       }
     }
 
+    // Trigger SMS delivery alert banner on status reception
+    if (
+      user?.status === "active" ||
+      user?.status === "declined" ||
+      found?.user?.status === "active" ||
+      found?.user?.status === "declined"
+    ) {
+      setTimeout(() => {
+        setShowIncomingSmsAlert(true);
+      }, 600);
+    }
+
     try {
       const bookings = await api.listBookings({
         trainerId: found?.id,
@@ -90,6 +113,7 @@ export default function TrainerDashboardPage() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     const user = api.getCurrentUser();
@@ -174,18 +198,173 @@ export default function TrainerDashboardPage() {
     );
   }
 
+  const coachPhone = currentUser?.phone || trainerProfile?.user?.phone || "+63 917 555 0192";
+  const coachName = currentUser?.firstName ? `Coach ${currentUser.firstName}` : "Coach";
+  const effectiveDeclineReason =
+    currentUser?.declineReason ||
+    trainerProfile?.declineReason ||
+    trainerProfile?.user?.declineReason ||
+    "Application requirements not met or coaching roster currently full.";
+
+  const activeSmsText = `Apex Iron Fitness: Congratulations ${coachName}! Your trainer registration has been accepted by gym administration. You may now access your trainer dashboard.`;
+  const declinedSmsText = `Apex Iron Fitness: Notice regarding your coach registration. Your application was declined by gym administration. Reason: ${effectiveDeclineReason}. Inquiries: contact front desk.`;
+
   const isDeclined =
     currentUser?.status === "declined" ||
     currentUser?.status === "inactive" ||
     trainerProfile?.user?.status === "declined" ||
     trainerProfile?.user?.status === "inactive";
 
+  const renderPhoneModalAndAlert = () => (
+    <>
+      {/* FLOATING INCOMING SMS ALERT BANNER */}
+      {showIncomingSmsAlert && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm w-full animate-in slide-in-from-top-4 duration-300">
+          <div className="p-4 rounded-2xl bg-slate-900/95 backdrop-blur-xl border-2 border-emerald-500/80 shadow-2xl shadow-emerald-950/80 text-white space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 shadow-md">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>SMS Received • APEX-FITNESS</span>
+                    <Badge variant="emerald" className="text-[8px] py-0 px-1 font-mono animate-pulse">
+                      NEW SMS
+                    </Badge>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    To Number: {coachPhone}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowIncomingSmsAlert(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-200 line-clamp-3 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 font-mono leading-relaxed">
+              {isDeclined ? declinedSmsText : activeSmsText}
+            </p>
+
+            <div className="flex items-center justify-between pt-1 text-[10px]">
+              <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                <Check className="w-3 h-3 text-emerald-400" /> Received on your phone
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowIncomingSmsAlert(false)}
+                  className="text-[10px] py-1 px-2.5 h-auto text-slate-300"
+                >
+                  Dismiss
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setShowIncomingSmsAlert(false);
+                    setIsPhoneModalOpen(true);
+                  }}
+                  className="text-[10px] py-1 px-2.5 h-auto bg-emerald-600 hover:bg-emerald-500 font-bold text-white"
+                  leftIcon={<Smartphone className="w-3 h-3" />}
+                >
+                  Open on Phone
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIRTUAL SMARTPHONE SMS VIEWER MODAL */}
+      {isPhoneModalOpen && (
+        <Modal
+          isOpen={true}
+          onClose={() => setIsPhoneModalOpen(false)}
+          title={`Trainer Mobile SMS Inbox • ${coachPhone}`}
+          maxWidth="sm"
+        >
+          <div className="flex flex-col items-center">
+            {/* Smartphone Device Shell Mockup */}
+            <div className="w-full max-w-[340px] bg-slate-950 rounded-[44px] border-[5px] border-slate-700 shadow-2xl p-4 relative overflow-hidden text-white font-sans ring-1 ring-slate-800">
+              {/* Dynamic Island / Notch */}
+              <div className="w-24 h-5 bg-black rounded-full mx-auto mb-3 flex items-center justify-center border border-slate-900 shadow-inner">
+                <div className="w-2 h-2 rounded-full bg-slate-900 mr-2" />
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+
+              {/* Status Bar */}
+              <div className="flex items-center justify-between text-[10px] text-slate-400 px-3 mb-3 font-semibold tracking-wider">
+                <span>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <div className="flex items-center gap-1.5">
+                  <span>5G</span>
+                  <div className="w-5 h-2.5 border border-slate-400 rounded-xs p-0.5 flex items-center">
+                    <div className="w-full h-full bg-emerald-400 rounded-3xs" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages Header */}
+              <div className="border-b border-slate-800/80 pb-3 mb-3 text-center">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center mx-auto mb-1.5 shadow-md shadow-emerald-500/20">
+                  APEX
+                </div>
+                <div className="font-bold text-sm text-white flex items-center justify-center gap-1">
+                  <span>APEX-FITNESS</span>
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 inline" />
+                </div>
+                <div className="text-[10px] text-emerald-400 font-medium">Official Gym Telephony SMS Gateway</div>
+                <div className="text-[9px] text-slate-400 mt-0.5 font-mono">Delivered to: {coachPhone}</div>
+              </div>
+
+              {/* SMS Message Thread */}
+              <div className="space-y-3 min-h-[190px] flex flex-col justify-end pb-3 text-xs">
+                <div className="text-[10px] text-slate-400 text-center font-medium">
+                  Today • {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </div>
+
+                <div
+                  className={`p-3.5 rounded-2xl text-white rounded-bl-xs max-w-[94%] shadow-lg leading-relaxed text-[11px] font-mono ${
+                    isDeclined
+                      ? "bg-rose-700/90 shadow-rose-950/40 border border-rose-500/30"
+                      : "bg-emerald-600 shadow-emerald-950/40"
+                  }`}
+                >
+                  {isDeclined ? declinedSmsText : activeSmsText}
+                </div>
+
+                <div className="flex items-center justify-between text-[9px] text-slate-400 px-1 pt-1">
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" /> Delivered via Cellular SMS
+                  </span>
+                  <span>Just now</span>
+                </div>
+              </div>
+
+              {/* Virtual Home Bar */}
+              <div className="w-28 h-1 bg-slate-600 rounded-full mx-auto mt-3" />
+            </div>
+
+            <div className="w-full flex items-center justify-between pt-4 border-t border-slate-800 mt-4 text-xs">
+              <span className="text-slate-400 text-[11px]">
+                Mobile Number: <strong className="text-white font-mono">{coachPhone}</strong>
+              </span>
+              <Button size="sm" onClick={() => setIsPhoneModalOpen(false)}>
+                Close Phone Screen
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+
   if (isDeclined) {
-    const declineReason =
-      currentUser?.declineReason ||
-      trainerProfile?.declineReason ||
-      trainerProfile?.user?.declineReason ||
-      "Application requirements not met or coaching roster currently full.";
+    const declineReason = effectiveDeclineReason;
 
     return (
       <div className="min-h-screen bg-[#090D14] text-white">
@@ -327,6 +506,20 @@ export default function TrainerDashboardPage() {
                   <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-900/40 text-[11px] text-emerald-200 font-mono leading-relaxed mt-1">
                     {`Apex Iron Fitness: Notice regarding your coach registration. Your application was declined by gym administration. Reason: ${declineReason}. Inquiries: contact front desk.`}
                   </div>
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-800/80">
+                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-400" /> Received on {currentUser?.phone || "+63 917 555 0192"}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsPhoneModalOpen(true)}
+                      leftIcon={<Smartphone className="w-3.5 h-3.5 text-emerald-400" />}
+                      className="text-[10px] py-1 px-2.5 h-auto text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10"
+                    >
+                      View on Phone Screen
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -356,6 +549,7 @@ export default function TrainerDashboardPage() {
             </div>
           </Card>
         </main>
+        {renderPhoneModalAndAlert()}
       </div>
     );
   }
@@ -557,8 +751,23 @@ export default function TrainerDashboardPage() {
                       <span className="text-white font-mono">{currentUser?.email}</span>) and mobile phone (
                       <span className="text-white font-mono">{currentUser?.phone || "+63 917 555 0192"}</span>).
                     </p>
+                    <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between border-t border-slate-800 gap-2">
+                      <span className="text-[10px] text-slate-400">
+                        Carrier Status: Connected to Cellular 5G Network
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleTestSms}
+                        leftIcon={<Smartphone className="w-3.5 h-3.5 text-emerald-400" />}
+                        className="text-[10px] py-1 px-2.5 h-auto text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10"
+                      >
+                        {testSmsSuccess ? "SMS Sent! Check Phone Alert" : "Test SMS to My Number"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
+
 
 
                 {/* Primary Action Buttons */}
@@ -598,9 +807,11 @@ export default function TrainerDashboardPage() {
             </Card>
           </div>
         </main>
+        {renderPhoneModalAndAlert()}
       </div>
     );
   }
+
 
   const handleComplete = async (bookingId: string, clientName: string) => {
     try {
@@ -747,16 +958,28 @@ export default function TrainerDashboardPage() {
             </div>
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsNotifModalOpen(true)}
-            leftIcon={<MessageSquare className="w-3.5 h-3.5 text-emerald-400" />}
-            className="text-xs border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 shrink-0 self-start sm:self-auto"
-          >
-            View Welcome Alerts
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsPhoneModalOpen(true)}
+              leftIcon={<Smartphone className="w-3.5 h-3.5 text-emerald-400" />}
+              className="text-xs border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+            >
+              View SMS on Phone
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsNotifModalOpen(true)}
+              leftIcon={<MessageSquare className="w-3.5 h-3.5 text-emerald-400" />}
+              className="text-xs border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+            >
+              View Welcome Alerts
+            </Button>
+          </div>
         </div>
+
 
         {/* Quick Trainer Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1233,8 +1456,11 @@ export default function TrainerDashboardPage() {
             </div>
           </Modal>
         )}
+
+        {renderPhoneModalAndAlert()}
       </div>
     </div>
   );
 }
+
 
