@@ -14,6 +14,7 @@ import {
   Receipt,
   Gift,
   ShieldAlert,
+  MessageSquare,
   Settings,
   LogOut,
   Flame,
@@ -46,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: "Trainers", href: "/admin/trainers", icon: Dumbbell },
     { label: "Billing & Revenue", href: "/admin/billing", icon: Receipt },
     { label: "Rewards Shop", href: "/admin/rewards", icon: Gift },
+    { label: "SMS Notifications", href: "/admin/sms", icon: MessageSquare },
     { label: "Retention & AI", href: "/admin/retention", icon: ShieldAlert },
   ];
 

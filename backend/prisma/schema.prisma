@@ -81,6 +81,14 @@ enum RiskLevel {
   high
 }
 
+enum SmsDeliveryStatus {
+  queued
+  accepted
+  delivered
+  failed
+  undelivered
+}
+
 model User {
   id            String        @id @default(uuid())
   email         String        @unique
@@ -94,11 +102,13 @@ model User {
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  member        Member?
-  trainer       Trainer?
-  notifications Notification[]
-  auditLogs     AuditLog[]
-  staffCheckIns Attendance[]  @relation("StaffCheckIns")
+  member                 Member?
+  trainer                Trainer?
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  staffCheckIns          Attendance[]                @relation("StaffCheckIns")
+  notificationPreference UserNotificationPreference?
+  smsLogs                SmsNotificationLog[]
 
   @@index([email])
   @@index([role])
@@ -151,9 +161,10 @@ model Trainer {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  availabilities  TrainerAvailability[]
-  bookings        TrainerBooking[]
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availabilities   TrainerAvailability[]
+  unavailabilities TrainerUnavailability[]
+  bookings         TrainerBooking[]
   classes         GymClass[]
   assignedPrograms WorkoutProgram[]
 
@@ -548,4 +559,65 @@ model GymSetting {
   updatedAt                    DateTime @updatedAt @map("updated_at")
 
   @@map("gym_settings")
+}
+
+model TrainerUnavailability {
+  id          String   @id @default(uuid())
+  trainerId   String   @map("trainer_id")
+  date        DateTime @map("date")
+  isAllDay    Boolean  @default(true) @map("is_all_day")
+  startTime   String?  @map("start_time")
+  endTime     String?  @map("end_time")
+  category    String   @default("General") // Vacation, Sick, Personal, Admin Override
+  description String?  @db.Text
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  trainer     Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId, date])
+  @@map("trainer_unavailabilities")
+}
+
+model SmsNotificationLog {
+  id                String            @id @default(uuid())
+  recipientPhone    String            @map("recipient_phone")
+  recipientUserId   String?           @map("recipient_user_id")
+  recipientName     String?           @map("recipient_name")
+  messageContent    String            @map("message_content") @db.Text
+  event             String            // e.g. "booking_created", "booking_confirmed", "payment_receipt"
+  provider          String            @default("semaphore")
+  providerMessageId String?           @map("provider_message_id")
+  status            SmsDeliveryStatus @default(queued)
+  statusCode        Int?              @map("status_code")
+  errorMessage      String?           @map("error_message") @db.Text
+  retryCount        Int               @default(0) @map("retry_count")
+  idempotencyKey    String?           @unique @map("idempotency_key")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  sentAt            DateTime?         @map("sent_at")
+
+  user              User?             @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([recipientPhone])
+  @@index([recipientUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sms_notification_logs")
+}
+
+model UserNotificationPreference {
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  smsEnabled    Boolean  @default(true) @map("sms_enabled")
+  bookingSms    Boolean  @default(true) @map("booking_sms")
+  paymentSms    Boolean  @default(true) @map("payment_sms")
+  membershipSms Boolean  @default(true) @map("membership_sms")
+  classSms      Boolean  @default(true) @map("class_sms")
+  reminderSms   Boolean  @default(true) @map("reminder_sms")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
 }

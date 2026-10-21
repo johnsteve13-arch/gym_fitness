@@ -1,4 +1,5 @@
 import { prisma } from "../config/database";
+import { SmsService } from "./sms.service";
 
 export class MembershipService {
   static async listPlans() {
@@ -66,6 +67,7 @@ export class MembershipService {
     const member = await prisma.member.findUnique({
       where: { id: data.memberId },
       include: {
+        user: true,
         memberships: {
           where: { status: "active" },
           orderBy: { endDate: "desc" },
@@ -105,7 +107,7 @@ export class MembershipService {
       },
     });
 
-    // Send notification
+    // Send in-app notification
     await prisma.notification.create({
       data: {
         userId: member.userId,
@@ -114,6 +116,19 @@ export class MembershipService {
         type: "membership",
       },
     });
+
+    // Send SMS notification
+    if (member.user?.phone) {
+      const smsMessage = SmsService.templates.membershipRenewed(plan.name, endDate.toLocaleDateString());
+      SmsService.sendSms({
+        toPhone: member.user.phone,
+        recipientUserId: member.userId,
+        recipientName: `${member.user.firstName} ${member.user.lastName}`,
+        event: "membership_renewed",
+        messageContent: smsMessage,
+        idempotencyKey: `membership_${newMembership.id}`,
+      }).catch((err) => console.warn("[SMS] Membership notification warning:", err.message));
+    }
 
     return newMembership;
   }

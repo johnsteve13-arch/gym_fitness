@@ -13,6 +13,7 @@ import aiRoutes from "./ai.routes";
 import notificationRoutes from "./notification.routes";
 import analyticsRoutes from "./analytics.routes";
 import trainerRoutes from "./trainer.routes";
+import smsRoutes from "./sms.routes";
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use("/rewards", rewardRoutes);
 router.use("/ai", aiRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/analytics", analyticsRoutes);
+router.use("/sms", smsRoutes);
 
 export default router;

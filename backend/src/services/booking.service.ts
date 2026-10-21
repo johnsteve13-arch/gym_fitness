@@ -2,6 +2,7 @@ import { prisma } from "../config/database";
 import { ENV } from "../config/env";
 import bcrypt from "bcryptjs";
 import { NotificationService } from "./notification.service";
+import { SmsService } from "./sms.service";
 
 export interface TrainerUnavailabilityRecord {
   id: string;
@@ -18,45 +19,131 @@ export interface TrainerUnavailabilityRecord {
 }
 
 export class BookingService {
-  private static trainerUnavailabilities: TrainerUnavailabilityRecord[] = [];
+  /**
+   * Persists trainer unavailability in the database (backed by Supabase PostgreSQL)
+   */
+  static async setTrainerUnavailability(record: {
+    trainerId: string;
+    trainerName?: string;
+    date: string; // YYYY-MM-DD
+    isFullDay?: boolean;
+    startTime?: string;
+    endTime?: string;
+    reasonCategory?: string;
+    description?: string;
+    createdBy?: string;
+  }): Promise<TrainerUnavailabilityRecord> {
+    const dateStr = record.date.slice(0, 10);
+    const dateObj = new Date(`${dateStr}T00:00:00.000Z`);
 
-  static async setTrainerUnavailability(record: Omit<TrainerUnavailabilityRecord, "id" | "createdAt">): Promise<TrainerUnavailabilityRecord> {
-    const newRecord: TrainerUnavailabilityRecord = {
-      id: `unavail-${Date.now()}`,
-      ...record,
-      createdAt: new Date().toISOString(),
-    };
-    this.trainerUnavailabilities.unshift(newRecord);
+    const created = await prisma.trainerUnavailability.create({
+      data: {
+        trainerId: record.trainerId,
+        date: dateObj,
+        isAllDay: record.isFullDay !== undefined ? record.isFullDay : true,
+        startTime: record.startTime || null,
+        endTime: record.endTime || null,
+        category: record.reasonCategory || "General",
+        description: record.description || "Trainer is marked unavailable.",
+        createdBy: record.createdBy || null,
+      },
+      include: {
+        trainer: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
 
     try {
       await prisma.auditLog.create({
         data: {
           userId: record.trainerId,
           action: "TRAINER_UNAVAILABILITY_SET",
-          entity: "trainers",
-          entityId: record.trainerId,
-          details: JSON.stringify(newRecord),
+          entity: "trainer_unavailabilities",
+          entityId: created.id,
+          details: JSON.stringify({
+            trainerId: record.trainerId,
+            date: dateStr,
+            isAllDay: created.isAllDay,
+            startTime: created.startTime,
+            endTime: created.endTime,
+            description: created.description,
+          }),
         },
       });
     } catch {}
 
-    return newRecord;
+    const trainerName =
+      record.trainerName ||
+      (created.trainer?.user
+        ? `${created.trainer.user.firstName} ${created.trainer.user.lastName}`
+        : "Coach");
+
+    return {
+      id: created.id,
+      trainerId: created.trainerId,
+      trainerName,
+      date: dateStr,
+      isFullDay: created.isAllDay,
+      startTime: created.startTime || undefined,
+      endTime: created.endTime || undefined,
+      reasonCategory: created.category,
+      description: created.description || "",
+      createdAt: created.createdAt.toISOString(),
+      createdBy: created.createdBy || undefined,
+    };
   }
 
+  /**
+   * Lists persistent trainer unavailabilities from Supabase PostgreSQL
+   */
   static async listTrainerUnavailabilities(trainerId?: string): Promise<TrainerUnavailabilityRecord[]> {
+    const where: any = {};
     if (trainerId) {
-      return this.trainerUnavailabilities.filter((u) => u.trainerId === trainerId);
+      where.trainerId = trainerId;
     }
-    return this.trainerUnavailabilities;
+
+    const unavailabilities = await prisma.trainerUnavailability.findMany({
+      where,
+      orderBy: { date: "asc" },
+      include: {
+        trainer: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    return unavailabilities.map((u) => ({
+      id: u.id,
+      trainerId: u.trainerId,
+      trainerName: u.trainer?.user
+        ? `${u.trainer.user.firstName} ${u.trainer.user.lastName}`
+        : "Coach",
+      date: u.date.toISOString().slice(0, 10),
+      isFullDay: u.isAllDay,
+      startTime: u.startTime || undefined,
+      endTime: u.endTime || undefined,
+      reasonCategory: u.category,
+      description: u.description || "",
+      createdAt: u.createdAt.toISOString(),
+      createdBy: u.createdBy || undefined,
+    }));
   }
 
+  /**
+   * Deletes a persistent trainer unavailability record from Supabase PostgreSQL
+   */
   static async deleteTrainerUnavailability(id: string): Promise<{ success: boolean }> {
-    const idx = this.trainerUnavailabilities.findIndex((u) => u.id === id);
-    if (idx !== -1) {
-      this.trainerUnavailabilities.splice(idx, 1);
-    }
+    await prisma.trainerUnavailability.delete({
+      where: { id },
+    });
     return { success: true };
   }
+
   static async listTrainers(params?: { includePending?: boolean }) {
     const where: any = {};
     if (!params?.includePending) {
@@ -84,6 +171,10 @@ export class BookingService {
     });
   }
 
+  /**
+   * Creates a trainer booking with atomic conflict prevention, half-open interval validation,
+   * past-booking protection, and multi-channel notification dispatch.
+   */
   static async createBooking(data: {
     memberId: string;
     trainerId: string;
@@ -108,155 +199,223 @@ export class BookingService {
       throw new Error("Invalid session time: Time to Finish must be later than Time to Start.");
     }
 
+    // Past booking protection: reject booking attempts in the past
+    const now = new Date();
+    const sessionStartDateTime = new Date(`${dateStr}T${data.startTime}:00.000Z`);
+    // Compare date if current day or older
+    const todayStr = now.toISOString().slice(0, 10);
+    if (dateStr < todayStr) {
+      throw new Error("Booking validation failed: Cannot reserve a training session in the past.");
+    }
+
     const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
     const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
 
     // 2. Perform availability validation & booking creation inside atomic database transaction
     try {
-      return await prisma.$transaction(async (tx) => {
-      // A. Fetch Trainer with active availabilities
-      const trainer = await tx.trainer.findUnique({
-        where: { id: data.trainerId },
-        include: {
-          user: true,
-          availabilities: { where: { isActive: true } },
-        },
-      });
-
-      if (!trainer) {
-        throw new Error("Trainer not found.");
-      }
-
-      if (trainer.user?.status !== "active") {
-        throw new Error(
-          "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot."
-        );
-      }
-
-      // B. Check working hours schedule
-      const dayOfWeek = sessionDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
-      let isWithinHours = true;
-      let declineReason = "";
-
-      if (trainer.availabilities.length > 0) {
-        const schedule = trainer.availabilities.find((a) => a.dayOfWeek === dayOfWeek);
-        if (!schedule) {
-          isWithinHours = false;
-          declineReason = `Coach ${trainer.user?.firstName} does not hold training sessions on this day of the week.`;
-        } else if (data.startTime < schedule.startTime || data.endTime > schedule.endTime) {
-          isWithinHours = false;
-          declineReason = `Requested time slot (${data.startTime} - ${data.endTime}) is outside coach working hours (${schedule.startTime} - ${schedule.endTime}).`;
-        }
-      }
-
-      // B.2 Check Admin Unavailability Override with custom description
-      const adminUnavail = BookingService.trainerUnavailabilities.find((u) => {
-        if (u.trainerId !== data.trainerId || u.date !== dateStr) return false;
-        if (u.isFullDay) return true;
-        const uStart = u.startTime || "08:00";
-        const uEnd = u.endTime || "18:00";
-        return data.startTime < uEnd && data.endTime > uStart;
-      });
-
-      if (adminUnavail) {
-        isWithinHours = false;
-        declineReason = `Coach ${trainer.user?.firstName || "Trainer"} is marked unavailable by Admin: "${adminUnavail.description}".`;
-      }
-
-      // C. Double-booking conflict check:
-      // An overlap occurs if: existing.startTime < requested.endTime && existing.endTime > requested.startTime
-      const existingConflict = await tx.trainerBooking.findFirst({
-        where: {
-          trainerId: data.trainerId,
-          sessionDate: {
-            gte: startOfDay,
-            lte: endOfDay,
+      const result = await prisma.$transaction(async (tx) => {
+        // A. Fetch Trainer with active availabilities
+        const trainer = await tx.trainer.findUnique({
+          where: { id: data.trainerId },
+          include: {
+            user: true,
+            availabilities: { where: { isActive: true } },
           },
-          status: { in: ["pending", "confirmed"] },
-          startTime: { lt: data.endTime },
-          endTime: { gt: data.startTime },
-        },
-        include: {
-          member: {
-            include: {
-              user: { select: { firstName: true, lastName: true, email: true } },
+        });
+
+        if (!trainer) {
+          throw new Error("Trainer not found.");
+        }
+
+        if (trainer.user?.status !== "active") {
+          throw new Error(
+            "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot."
+          );
+        }
+
+        // B. Check working hours schedule
+        const dayOfWeek = sessionDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+        let isWithinHours = true;
+        let declineReason = "";
+
+        if (trainer.availabilities.length > 0) {
+          const schedule = trainer.availabilities.find((a) => a.dayOfWeek === dayOfWeek);
+          if (!schedule) {
+            isWithinHours = false;
+            declineReason = `Coach ${trainer.user?.firstName} does not hold training sessions on this day of the week.`;
+          } else if (data.startTime < schedule.startTime || data.endTime > schedule.endTime) {
+            isWithinHours = false;
+            declineReason = `Requested time slot (${data.startTime} - ${data.endTime}) is outside coach working hours (${schedule.startTime} - ${schedule.endTime}).`;
+          }
+        }
+
+        // B.2 Check Persistent Unavailability Override from Database
+        const dbUnavailabilities = await tx.trainerUnavailability.findMany({
+          where: {
+            trainerId: data.trainerId,
+            date: {
+              gte: startOfDay,
+              lte: endOfDay,
             },
           },
-        },
-      });
+        });
 
-      // D. Automatic Decline if unavailable or conflict
-      if (!isWithinHours || existingConflict) {
-        const fullConflictReason = existingConflict
-          ? `Double-booking conflict prevented: Coach already has an active reservation from ${existingConflict.startTime} to ${existingConflict.endTime}.`
-          : declineReason;
+        const activeUnavail = dbUnavailabilities.find((u) => {
+          if (u.isAllDay) return true;
+          const uStart = u.startTime || "08:00";
+          const uEnd = u.endTime || "18:00";
+          return data.startTime < uEnd && data.endTime > uStart;
+        });
 
-        // Payment Protection: Throwing here aborts the transaction cleanly without deducting coins or charging funds
-        const declineErr: any = new Error(
-          "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot."
-        );
-        declineErr.statusCode = 409;
-        declineErr.isDeclined = true;
-        declineErr.conflictDetails = {
-          trainerId: data.trainerId,
-          trainerName: `${trainer.user.firstName} ${trainer.user.lastName}`,
-          memberId: data.memberId,
-          sessionDate: dateStr,
-          startTime: data.startTime,
-          endTime: data.endTime,
-          reason: fullConflictReason,
-          paymentProtected: true,
-          status: "declined",
-          price: trainer.hourlyRate,
-        };
-        throw declineErr;
-      }
+        if (activeUnavail) {
+          isWithinHours = false;
+          declineReason = `Coach ${trainer.user?.firstName || "Trainer"} is marked unavailable: "${
+            activeUnavail.description || activeUnavail.category
+          }".`;
+        }
 
-      // E. Payment Processing (Coins vs Cash/Card) - Protected because validation passed!
-      const [startH, startM] = data.startTime.split(":").map(Number);
-      const [endH, endM] = data.endTime.split(":").map(Number);
-      const durationHours = Math.max(0.5, (endH * 60 + (endM || 0) - (startH * 60 + (startM || 0))) / 60);
-
-      const calculatedPrice = Math.round(Number(trainer.hourlyRate) * durationHours);
-      const isCoinsPayment = data.paymentMethod === "coins";
-      const coinsRequired = 150; // Steady to 150 coins only
-
-      if (isCoinsPayment) {
-        // Enforce 1-day redemption limit: members can use the 150 coins redemption for 1 day only
-        const existingCoinBooking = await tx.trainerBooking.findFirst({
+        // C. Double-booking conflict check with half-open intervals [start, end)
+        // An overlap occurs if: existing.startTime < requested.endTime && existing.endTime > requested.startTime
+        const existingConflict = await tx.trainerBooking.findFirst({
           where: {
-            memberId: data.memberId,
-            sessionDate: sessionDate,
-            status: { notIn: ["declined", "cancelled"] },
-            OR: [
-              { notes: { contains: "Redeemed" } },
-              { notes: { contains: "Coins" } },
-            ],
+            trainerId: data.trainerId,
+            sessionDate: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
+            status: { in: ["pending", "confirmed"] },
+            startTime: { lt: data.endTime },
+            endTime: { gt: data.startTime },
+          },
+          include: {
+            member: {
+              include: {
+                user: { select: { firstName: true, lastName: true, email: true } },
+              },
+            },
           },
         });
-        if (existingCoinBooking) {
-          throw new Error(
-            "Daily Limit Reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). Please use Direct Payment for additional sessions on this date."
+
+        // D. Automatic Decline if unavailable or conflict
+        if (!isWithinHours || existingConflict) {
+          const fullConflictReason = existingConflict
+            ? `Double-booking conflict prevented: Coach already has an active reservation from ${existingConflict.startTime} to ${existingConflict.endTime}.`
+            : declineReason;
+
+          // Payment Protection: Throwing here aborts the transaction cleanly without deducting coins or charging funds
+          const declineErr: any = new Error(
+            "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot."
           );
+          declineErr.statusCode = 409;
+          declineErr.isDeclined = true;
+          declineErr.conflictDetails = {
+            trainerId: data.trainerId,
+            trainerName: `${trainer.user.firstName} ${trainer.user.lastName}`,
+            memberId: data.memberId,
+            sessionDate: dateStr,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            reason: fullConflictReason,
+            paymentProtected: true,
+            status: "declined",
+            price: trainer.hourlyRate,
+          };
+          throw declineErr;
         }
 
-        const member = await tx.member.findUnique({
-          where: { id: data.memberId },
-          include: { user: true },
-        });
-        if (!member) throw new Error("Member not found.");
+        // E. Payment Processing (Coins vs Cash/Card) - Protected because validation passed!
+        const [startH, startM] = data.startTime.split(":").map(Number);
+        const [endH, endM] = data.endTime.split(":").map(Number);
+        const durationHours = Math.max(
+          0.5,
+          (endH * 60 + (endM || 0) - (startH * 60 + (startM || 0))) / 60
+        );
 
-        if (member.rewardCoins < coinsRequired) {
-          throw new Error(
-            `Insufficient coin balance. You have ${member.rewardCoins} coins, but trainer redemption requires ${coinsRequired} coins.`
-          );
+        const calculatedPrice = Math.round(Number(trainer.hourlyRate) * durationHours);
+        const isCoinsPayment = data.paymentMethod === "coins";
+        const coinsRequired = 150; // Steady to 150 coins only
+
+        if (isCoinsPayment) {
+          // Enforce 1-day redemption limit: members can use the 150 coins redemption for 1 day only
+          const existingCoinBooking = await tx.trainerBooking.findFirst({
+            where: {
+              memberId: data.memberId,
+              sessionDate: sessionDate,
+              status: { notIn: ["declined", "cancelled"] },
+              OR: [{ notes: { contains: "Redeemed" } }, { notes: { contains: "Coins" } }],
+            },
+          });
+          if (existingCoinBooking) {
+            throw new Error(
+              "Daily Limit Reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). Please use Direct Payment for additional sessions on this date."
+            );
+          }
+
+          const member = await tx.member.findUnique({
+            where: { id: data.memberId },
+            include: { user: true },
+          });
+          if (!member) throw new Error("Member not found.");
+
+          if (member.rewardCoins < coinsRequired) {
+            throw new Error(
+              `Insufficient coin balance. You have ${member.rewardCoins} coins, but trainer redemption requires ${coinsRequired} coins.`
+            );
+          }
+
+          // Deduct coins inside transaction
+          await tx.member.update({
+            where: { id: data.memberId },
+            data: { rewardCoins: { decrement: coinsRequired } },
+          });
+
+          const booking = await tx.trainerBooking.create({
+            data: {
+              memberId: data.memberId,
+              trainerId: data.trainerId,
+              sessionDate,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              sessionType: data.sessionType || "1-on-1 Fitness",
+              status: "confirmed",
+              paymentStatus: "completed",
+              price: calculatedPrice,
+              notes: data.notes
+                ? `${data.notes} [Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]`
+                : `[Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]`,
+              expiresAt: null,
+            },
+            include: {
+              trainer: {
+                include: {
+                  user: { select: { firstName: true, lastName: true, phone: true } },
+                },
+              },
+              member: {
+                include: {
+                  user: { select: { firstName: true, lastName: true, phone: true, id: true } },
+                },
+              },
+            },
+          });
+
+          await tx.notification.create({
+            data: {
+              userId: member.userId,
+              title: "Loyalty Coins Redeemed for Trainer (1-Day Payment)",
+              message: `Redeemed ${coinsRequired} coins for one day's payment to Coach ${
+                trainer.user?.firstName || "Trainer"
+              } (Time to Start: ${data.startTime} • Time to Finish: ${data.endTime}).`,
+              type: "reward",
+            },
+          });
+
+          return booking;
         }
 
-        // Deduct coins inside transaction
-        await tx.member.update({
-          where: { id: data.memberId },
-          data: { rewardCoins: { decrement: coinsRequired } },
-        });
+        // Unpaid Direct Payment Booking
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + ENV.UNPAID_BOOKING_TIMEOUT_MINUTES);
 
         const booking = await tx.trainerBooking.create({
           data: {
@@ -266,89 +425,93 @@ export class BookingService {
             startTime: data.startTime,
             endTime: data.endTime,
             sessionType: data.sessionType || "1-on-1 Fitness",
-            status: "confirmed",
-            paymentStatus: "completed",
+            status: "pending",
+            paymentStatus: "unpaid",
             price: calculatedPrice,
-            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]` : `[Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]`,
-            expiresAt: null,
+            notes: data.notes || null,
+            expiresAt,
           },
           include: {
             trainer: {
               include: {
-                user: { select: { firstName: true, lastName: true } },
+                user: { select: { firstName: true, lastName: true, phone: true } },
+              },
+            },
+            member: {
+              include: {
+                user: { select: { firstName: true, lastName: true, phone: true, id: true } },
               },
             },
           },
         });
 
-        await tx.notification.create({
-          data: {
-            userId: member.userId,
-            title: "Loyalty Coins Redeemed for Trainer (1-Day Payment)",
-            message: `Redeemed ${coinsRequired} coins for one day's payment to Coach ${trainer.user?.firstName || "Trainer"} (Time to Start: ${data.startTime} • Time to Finish: ${data.endTime}).`,
-            type: "reward",
-          },
+        const member = await tx.member.findUnique({
+          where: { id: data.memberId },
+          include: { user: true },
         });
 
-        return booking;
-      }
-
-      // Unpaid Direct Payment Booking
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + ENV.UNPAID_BOOKING_TIMEOUT_MINUTES);
-
-      const booking = await tx.trainerBooking.create({
-        data: {
-          memberId: data.memberId,
-          trainerId: data.trainerId,
-          sessionDate,
-          startTime: data.startTime,
-          endTime: data.endTime,
-          sessionType: data.sessionType || "1-on-1 Fitness",
-          status: "pending",
-          paymentStatus: "unpaid",
-          price: calculatedPrice,
-          notes: data.notes || null,
-          expiresAt,
-        },
-        include: {
-          trainer: {
-            include: {
-              user: { select: { firstName: true, lastName: true } },
+        if (member) {
+          await tx.notification.create({
+            data: {
+              userId: member.userId,
+              title: "Trainer Session Reserved",
+              message: `Session reserved with Coach ${trainer.user?.firstName || "Trainer"} on ${dateStr} at ${
+                data.startTime
+              }. Please complete payment within 30 minutes to confirm.`,
+              type: "booking",
             },
-          },
-        },
+          });
+        }
+
+        return booking;
       });
 
-      return booking;
-    });
+      // Out-of-transaction SMS notification dispatch (prevents external network failure from breaking database commit)
+      if (result) {
+        const memberUser = (result as any).member?.user;
+        const trainerUser = (result as any).trainer?.user;
+        const coachName = trainerUser ? `${trainerUser.firstName} ${trainerUser.lastName}` : "Trainer";
+
+        if (memberUser?.phone) {
+          const smsMsg =
+            result.status === "confirmed"
+              ? SmsService.templates.bookingConfirmed(coachName, dateStr, `${data.startTime} - ${data.endTime}`)
+              : SmsService.templates.bookingRequested(coachName, dateStr, `${data.startTime} - ${data.endTime}`);
+
+          SmsService.sendSms({
+            toPhone: memberUser.phone,
+            recipientUserId: memberUser.id,
+            recipientName: `${memberUser.firstName} ${memberUser.lastName}`,
+            event: result.status === "confirmed" ? "booking_confirmed" : "booking_requested",
+            messageContent: smsMsg,
+            idempotencyKey: `booking_${result.id}`,
+          }).catch((smsErr) => console.warn("[SMS] Failed to dispatch booking SMS:", smsErr.message));
+        }
+      }
+
+      return result;
     } catch (err: any) {
       if (err.isDeclined && err.conflictDetails) {
-        // Admin Monitoring: Persist declined conflict audit log & declined booking record in database
         try {
           await prisma.auditLog.create({
             data: {
-              userId: data.memberId,
+              userId: err.conflictDetails.trainerId,
               action: "TRAINER_BOOKING_DECLINED_CONFLICT",
               entity: "trainer_bookings",
-              entityId: data.trainerId,
-              ipAddress: data.ipAddress || null,
-              userAgent: data.userAgent || null,
               details: JSON.stringify(err.conflictDetails),
             },
           });
 
           await prisma.trainerBooking.create({
             data: {
-              memberId: data.memberId,
-              trainerId: data.trainerId,
-              sessionDate,
-              startTime: data.startTime,
-              endTime: data.endTime,
-              sessionType: data.sessionType || "1-on-1 Fitness",
+              memberId: err.conflictDetails.memberId,
+              trainerId: err.conflictDetails.trainerId,
+              sessionDate: new Date(`${err.conflictDetails.sessionDate}T00:00:00.000Z`),
+              startTime: err.conflictDetails.startTime,
+              endTime: err.conflictDetails.endTime,
               status: "declined",
               paymentStatus: "unpaid",
-              price: err.conflictDetails.price || 75,
+              price: err.conflictDetails.price || 80,
               notes: `Booking Declined: ${err.conflictDetails.reason}`,
             },
           });
@@ -419,19 +582,25 @@ export class BookingService {
       if (isCoinsRedemption) {
         const match = booking.notes?.match(/Redeemed\s+(\d+)\s+Coins/i);
         const coinsAmount = match ? parseInt(match[1], 10) : 150;
-        await prisma.member.update({
-          where: { id: booking.memberId },
-          data: { rewardCoins: { increment: coinsAmount } },
-        }).catch(() => null);
+        await prisma.member
+          .update({
+            where: { id: booking.memberId },
+            data: { rewardCoins: { increment: coinsAmount } },
+          })
+          .catch(() => null);
 
-        await prisma.notification.create({
-          data: {
-            userId: booking.member.userId,
-            title: "Coins Refunded: Trainer Unavailable",
-            message: `Coach ${booking.trainer.user.firstName} is unavailable and declined the booking on ${new Date(booking.sessionDate).toLocaleDateString()}. ${coinsAmount} Loyalty Coins have been refunded to your account balance.`,
-            type: "reward",
-          },
-        }).catch(() => null);
+        await prisma.notification
+          .create({
+            data: {
+              userId: booking.member.userId,
+              title: "Coins Refunded: Trainer Unavailable",
+              message: `Coach ${booking.trainer.user.firstName} is unavailable and declined the booking on ${new Date(
+                booking.sessionDate
+              ).toLocaleDateString()}. ${coinsAmount} Loyalty Coins have been refunded to your account balance.`,
+              type: "reward",
+            },
+          })
+          .catch(() => null);
       }
     }
 
@@ -440,6 +609,7 @@ export class BookingService {
       data: updateData,
       include: {
         trainer: { include: { user: true } },
+        member: { include: { user: true } },
       },
     });
 
@@ -448,38 +618,79 @@ export class BookingService {
     const notifTitle = isDeclined
       ? "Trainer Session Declined"
       : `Training Session ${status.toUpperCase()}`;
-    const notifMessage = isDeclined
-      ? `Booking Declined: Coach ${updated.trainer.user.firstName} is unavailable at your requested date and time (${reason || "Trainer unavailable"}). Any coins or payments have been reversed.`
-      : `Your session with Trainer ${updated.trainer.user.firstName} on ${new Date(booking.sessionDate).toLocaleDateString()} has been marked as ${status}.`;
 
-    await prisma.notification.create({
-      data: {
-        userId: booking.member.userId,
-        title: notifTitle,
-        message: notifMessage,
-        type: "booking",
-      },
-    }).catch(() => null);
+    const notifMessage = isDeclined
+      ? `Booking Declined: Coach ${updated.trainer.user.firstName} is unavailable at your requested date and time (${
+          reason || "Trainer unavailable"
+        }). Any coins or payments have been reversed.`
+      : `Your session with Trainer ${updated.trainer.user.firstName} on ${new Date(
+          booking.sessionDate
+        ).toLocaleDateString()} has been marked as ${status}.`;
+
+    await prisma.notification
+      .create({
+        data: {
+          userId: booking.member.userId,
+          title: notifTitle,
+          message: notifMessage,
+          type: "booking",
+        },
+      })
+      .catch(() => null);
+
+    // Multi-channel SMS dispatch to member phone
+    if (booking.member.user?.phone) {
+      const coachName = `${booking.trainer.user.firstName} ${booking.trainer.user.lastName}`;
+      const dateStr = booking.sessionDate.toISOString().slice(0, 10);
+      const timeStr = `${booking.startTime} - ${booking.endTime}`;
+
+      let smsContent = "";
+      let smsEvent: any = "booking_confirmed";
+
+      if (status === "declined") {
+        smsEvent = "booking_declined";
+        smsContent = SmsService.templates.bookingDeclined(coachName, dateStr, timeStr, reason);
+      } else if (status === "cancelled") {
+        smsEvent = "booking_cancelled_trainer";
+        smsContent = SmsService.templates.bookingCancelledTrainer(coachName, dateStr, timeStr);
+      } else if (status === "confirmed") {
+        smsEvent = "booking_confirmed";
+        smsContent = SmsService.templates.bookingConfirmed(coachName, dateStr, timeStr);
+      }
+
+      if (smsContent) {
+        SmsService.sendSms({
+          toPhone: booking.member.user.phone,
+          recipientUserId: booking.member.userId,
+          recipientName: `${booking.member.user.firstName} ${booking.member.user.lastName}`,
+          event: smsEvent,
+          messageContent: smsContent,
+          idempotencyKey: `status_change_${booking.id}_${status}`,
+        }).catch((err) => console.warn("[SMS] Status update dispatch warning:", err.message));
+      }
+    }
 
     // Admin Monitoring: Record in audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: booking.trainer.userId,
-        action: isDeclined ? "TRAINER_DECLINED_BOOKING" : "TRAINER_BOOKING_STATUS_CHANGED",
-        entity: "trainer_bookings",
-        entityId: bookingId,
-        details: JSON.stringify({
-          bookingId,
-          trainerId: booking.trainerId,
-          trainerName: `${booking.trainer.user.firstName} ${booking.trainer.user.lastName}`,
-          memberId: booking.memberId,
-          memberName: `${booking.member.user.firstName} ${booking.member.user.lastName}`,
-          status,
-          reason: reason || null,
-          paymentProtected: true,
-        }),
-      },
-    }).catch(() => null);
+    await prisma.auditLog
+      .create({
+        data: {
+          userId: booking.trainer.userId,
+          action: isDeclined ? "TRAINER_DECLINED_BOOKING" : "TRAINER_BOOKING_STATUS_CHANGED",
+          entity: "trainer_bookings",
+          entityId: bookingId,
+          details: JSON.stringify({
+            bookingId,
+            trainerId: booking.trainerId,
+            trainerName: `${booking.trainer.user.firstName} ${booking.trainer.user.lastName}`,
+            memberId: booking.memberId,
+            memberName: `${booking.member.user.firstName} ${booking.member.user.lastName}`,
+            status,
+            reason: reason || null,
+            paymentProtected: true,
+          }),
+        },
+      })
+      .catch(() => null);
 
     return updated;
   }
@@ -648,8 +859,8 @@ export class BookingService {
 
     return {
       success: true,
-      message: `Trainer ${fullName} has been confirmed and activated. Notifications dispatched to Gmail (${email}) and SMS (${phone}).`,
-      notificationsSent,
+      message: `Trainer ${fullName} confirmed and notified via Email & SMS.`,
+      notifications: notificationsSent,
       trainer: {
         ...trainer,
         user: updatedUser,
@@ -669,8 +880,6 @@ export class BookingService {
       throw new Error("Trainer not found.");
     }
 
-    const declineReason = reason || "Application requirements not met or coaching roster currently full.";
-
     const updatedUser = await prisma.user.update({
       where: { id: trainer.userId },
       data: { status: "inactive" },
@@ -680,21 +889,18 @@ export class BookingService {
     const email = trainer.user.email;
     const phone = trainer.user.phone || "+63 912 345 6789";
 
-    // Multi-channel dispatch: Gmail & Phone Number (SMS)
     const notificationsSent = await NotificationService.sendTrainerDeclineNotifications({
       userId: trainer.userId,
       name: fullName,
       email,
       phone,
-      reason: declineReason,
+      reason: reason || "Profile does not currently meet our requirements.",
     });
 
     return {
       success: true,
-      message: `Trainer registration for Coach ${fullName} has been declined. Decision notice dispatched to Gmail (${email}) and SMS (${phone}).`,
-      status: "declined",
-      reason: declineReason,
-      notificationsSent,
+      message: `Trainer ${fullName} application declined and notified via Email & SMS.`,
+      notifications: notificationsSent,
       trainer: {
         ...trainer,
         user: updatedUser,
@@ -748,12 +954,29 @@ export class BookingService {
       isActive: true,
     };
 
-    const adminUnavailabilities = this.trainerUnavailabilities.filter(
-      (u) => u.trainerId === params.trainerId && u.date === dateStr
-    );
-    const activeAdminUnavail = adminUnavailabilities.length > 0 ? adminUnavailabilities[0] : null;
+    // Database persistent unavailability
+    const dbUnavailabilities = await prisma.trainerUnavailability.findMany({
+      where: {
+        trainerId: params.trainerId,
+        date: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+    });
+    const activeAdminUnavail = dbUnavailabilities.length > 0 ? dbUnavailabilities[0] : null;
 
-    const standardSlots = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    const standardSlots = [
+      "08:00",
+      "09:00",
+      "10:00",
+      "11:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+    ];
     const slots = standardSlots.map((slot) => {
       const [h, m] = slot.split(":");
       const endH = (parseInt(h, 10) + 1).toString().padStart(2, "0");
@@ -762,8 +985,8 @@ export class BookingService {
       const conflict = bookings.find((b) => slot < b.endTime && slotEnd > b.startTime);
       const isWithinHours = slot >= schedule.startTime && slotEnd <= schedule.endTime;
 
-      const unavail = adminUnavailabilities.find((u) => {
-        if (u.isFullDay) return true;
+      const unavail = dbUnavailabilities.find((u) => {
+        if (u.isAllDay) return true;
         const uStart = u.startTime || "08:00";
         const uEnd = u.endTime || "18:00";
         return slot < uEnd && slotEnd > uStart;
@@ -879,4 +1102,3 @@ export class BookingService {
     };
   }
 }
-

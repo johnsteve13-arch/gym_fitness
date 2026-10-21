@@ -1,4 +1,5 @@
 import { prisma } from "../config/database";
+import { SmsService } from "./sms.service";
 
 export class ClassService {
   static async listClasses(params: { category?: string; scheduleDate?: string }) {
@@ -102,19 +103,41 @@ export class ClassService {
       },
     });
 
-    const member = await prisma.member.findUnique({ where: { id: memberId } });
+    const member = await prisma.member.findUnique({
+      where: { id: memberId },
+      include: { user: true },
+    });
+
     if (member) {
+      const dateStr = new Date(gymClass.scheduleDate).toLocaleDateString();
       await prisma.notification.create({
         data: {
           userId: member.userId,
           title: status === "booked" ? "Class Confirmed" : "Added to Class Waitlist",
           message:
             status === "booked"
-              ? `You are confirmed for ${gymClass.name} on ${new Date(gymClass.scheduleDate).toLocaleDateString()} at ${gymClass.startTime}.`
+              ? `You are confirmed for ${gymClass.name} on ${dateStr} at ${gymClass.startTime}.`
               : `The class is currently full. You are #${waitlistPosition} on the waitlist for ${gymClass.name}.`,
           type: "booking",
         },
       });
+
+      if (status === "booked" && member.user?.phone) {
+        const smsContent = SmsService.templates.classConfirmed(
+          gymClass.name,
+          dateStr,
+          gymClass.startTime,
+          gymClass.room
+        );
+        SmsService.sendSms({
+          toPhone: member.user.phone,
+          recipientUserId: member.userId,
+          recipientName: `${member.user.firstName} ${member.user.lastName}`,
+          event: "class_confirmed",
+          messageContent: smsContent,
+          idempotencyKey: `class_${booking.id}`,
+        }).catch((err) => console.warn("[SMS] Class booking notification warning:", err.message));
+      }
     }
 
     return booking;
@@ -160,6 +183,24 @@ export class ClassService {
             type: "booking",
           },
         });
+
+        if (nextInLine.member.user?.phone) {
+          const dateStr = new Date(nextInLine.class.scheduleDate).toLocaleDateString();
+          const smsContent = SmsService.templates.classConfirmed(
+            nextInLine.class.name,
+            dateStr,
+            nextInLine.class.startTime,
+            nextInLine.class.room
+          );
+          SmsService.sendSms({
+            toPhone: nextInLine.member.user.phone,
+            recipientUserId: nextInLine.member.userId,
+            recipientName: `${nextInLine.member.user.firstName} ${nextInLine.member.user.lastName}`,
+            event: "class_confirmed",
+            messageContent: smsContent,
+            idempotencyKey: `waitlist_promote_${nextInLine.id}_${Date.now()}`,
+          }).catch((err) => console.warn("[SMS] Waitlist promotion notification warning:", err.message));
+        }
       }
     }
 

@@ -2416,6 +2416,74 @@ class ApiClient {
       ];
     }
   }
+
+  // Philippine SMS Integration Methods
+  async getSmsStats(): Promise<any> {
+    try {
+      return await this.request("/sms/stats");
+    } catch {
+      return {
+        provider: "semaphore",
+        senderName: "SEMAPHORE",
+        enabled: true,
+        dryRun: true,
+        metrics: {
+          total: 12,
+          delivered: 10,
+          accepted: 2,
+          failed: 0,
+          undelivered: 0,
+          successRate: 100,
+        },
+        recentLogs: [],
+      };
+    }
+  }
+
+  async getSmsLogs(page = 1, limit = 20, status?: string): Promise<any> {
+    try {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (status) q.append("status", status);
+      return await this.request(`/sms/logs?${q.toString()}`);
+    } catch {
+      return { logs: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
+    }
+  }
+
+  async sendTestSms(phone: string, message: string): Promise<any> {
+    return await this.request("/sms/test", {
+      method: "POST",
+      body: JSON.stringify({ phone, message }),
+    });
+  }
+
+  async retrySms(id: string): Promise<any> {
+    return await this.request(`/sms/retry/${id}`, {
+      method: "POST",
+    });
+  }
+
+  async getSmsPreferences(): Promise<any> {
+    try {
+      return await this.request("/sms/preferences");
+    } catch {
+      return {
+        smsEnabled: true,
+        bookingSms: true,
+        paymentSms: true,
+        membershipSms: true,
+        classSms: true,
+        reminderSms: true,
+      };
+    }
+  }
+
+  async updateSmsPreferences(prefs: any): Promise<any> {
+    return await this.request("/sms/preferences", {
+      method: "PUT",
+      body: JSON.stringify(prefs),
+    });
+  }
 }
 
 export const api = new ApiClient();

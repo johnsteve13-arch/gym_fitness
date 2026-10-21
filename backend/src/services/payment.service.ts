@@ -1,5 +1,6 @@
 import { prisma } from "../config/database";
 import crypto from "crypto";
+import { SmsService } from "./sms.service";
 
 export class PaymentService {
   static generateInvoiceNumber(): string {
@@ -37,7 +38,7 @@ export class PaymentService {
           amount: data.amount,
           discountAmount: discount,
           netAmount,
-          currency: "USD",
+          currency: "PHP",
           paymentMethod: data.paymentMethod,
           paymentStatus: "completed",
           paymentType: data.paymentType,
@@ -68,8 +69,8 @@ export class PaymentService {
         });
       }
 
-      // Award bonus reward coins for payment (1 coin per $1 spent)
-      const earnedCoins = Math.floor(netAmount);
+      // Award bonus reward coins for payment (1 coin per 50 PHP spent)
+      const earnedCoins = Math.floor(netAmount / 50);
       if (earnedCoins > 0) {
         await tx.member.update({
           where: { id: data.memberId },
@@ -87,18 +88,33 @@ export class PaymentService {
         });
       }
 
-      // Create notification
+      // Create in-app notification
       await tx.notification.create({
         data: {
           userId: createdPayment.member.userId,
           title: "Payment Received",
-          message: `Your payment of $${netAmount.toFixed(2)} (${invoiceNumber}) has been successfully processed. Thank you!`,
+          message: `Your payment of ₱${netAmount.toFixed(2)} (${invoiceNumber}) has been successfully processed. Thank you!`,
           type: "payment",
         },
       });
 
       return createdPayment;
     });
+
+    // Send SMS Receipt asynchronously (safe outside transaction)
+    if (payment.member.user?.phone) {
+      const memberName = `${payment.member.user.firstName} ${payment.member.user.lastName}`;
+      const smsMessage = SmsService.templates.paymentSuccess(netAmount, invoiceNumber);
+
+      SmsService.sendSms({
+        toPhone: payment.member.user.phone,
+        recipientUserId: payment.member.userId,
+        recipientName: memberName,
+        event: "payment_success",
+        messageContent: smsMessage,
+        idempotencyKey: `payment_receipt_${payment.id}`,
+      }).catch((err) => console.warn("[SMS] Payment receipt dispatch warning:", err.message));
+    }
 
     return payment;
   }

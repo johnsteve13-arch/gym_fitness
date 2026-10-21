@@ -1,4 +1,5 @@
 import { prisma } from "../config/database";
+import { SmsService } from "./sms.service";
 
 export interface DispatchedNotificationReceipt {
   id: string;
@@ -60,7 +61,7 @@ export class NotificationService {
   }
 
   /**
-   * Dispatches an SMS notification to the trainer's mobile phone number
+   * Dispatches an SMS notification using the dedicated SmsService
    */
   static async sendSmsNotification(params: {
     toPhone: string;
@@ -70,69 +71,30 @@ export class NotificationService {
   }): Promise<DispatchedNotificationReceipt> {
     const { toPhone, recipientName, message, metadata } = params;
 
-    let provider = "Apex Telephony Gateway (SMS Direct)";
-    let deliveryStatus: "delivered" | "sent" = "delivered";
-
-    // Support for live SMS gateway dispatch if environment variables are configured
-    if (process.env.SEMAPHORE_API_KEY) {
-      try {
-        const response = await fetch("https://api.semaphore.co/api/v4/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            apikey: process.env.SEMAPHORE_API_KEY,
-            number: toPhone,
-            message,
-            sendername: process.env.SEMAPHORE_SENDER_NAME || "SEMAPHORE",
-          }),
-        });
-        if (response.ok) {
-          provider = "Semaphore Cellular SMS Gateway";
-        }
-      } catch (err) {
-        console.warn("[SMS GATEWAY] Semaphore dispatch error, fallback to telephony gateway", err);
-      }
-    } else if (process.env.SMS_WEBHOOK_URL) {
-      try {
-        await fetch(process.env.SMS_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: toPhone, message, recipientName, timestamp: new Date().toISOString() }),
-        });
-        provider = "Cloud Webhook SMS Gateway";
-      } catch (err) {
-        console.warn("[SMS GATEWAY] Webhook dispatch error", err);
-      }
-    }
+    const smsResult = await SmsService.sendSms({
+      toPhone,
+      recipientUserId: metadata?.userId,
+      recipientName,
+      event: (metadata?.event as any) || "custom_admin",
+      messageContent: message,
+      idempotencyKey: metadata?.idempotencyKey || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    });
 
     const receipt: DispatchedNotificationReceipt = {
-      id: `sms_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      id: smsResult.logId || `sms_${Date.now()}`,
       channel: "sms",
       recipient: toPhone,
       recipientName,
       content: message,
-      provider,
-      status: deliveryStatus,
+      provider: smsResult.provider,
+      status: smsResult.status === "failed" ? "sent" : "delivered",
       sentAt: new Date().toISOString(),
       metadata,
     };
 
     dispatchHistory.unshift(receipt);
-
-    // Formatted delivery log for inspection and auditing
-    console.log(
-      `\n================================================================================\n` +
-      `[SMS MOBILE NOTIFICATION DISPATCH]\n` +
-      `To: ${recipientName ? `${recipientName} (${toPhone})` : toPhone}\n` +
-      `Gateway: ${receipt.provider} (Status: ${receipt.status.toUpperCase()})\n` +
-      `Timestamp: ${receipt.sentAt}\n` +
-      `SMS Text: "${message}"\n` +
-      `================================================================================\n`
-    );
-
     return receipt;
   }
-
 
   /**
    * Handles multi-channel notification dispatch when admin accepts/confirms a trainer registration
