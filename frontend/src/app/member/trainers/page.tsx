@@ -159,12 +159,19 @@ export default function MemberTrainersPage() {
     const durationHours = api.calculateDurationHours(startTime, endTime);
     const durationText = api.formatDurationText(startTime, endTime);
     const trainerRate = Number(selectedTrainer.hourlyRate) === 500 ? 80 : Number(selectedTrainer.hourlyRate);
-    const coinsCost = api.calculateTrainerCoins(trainerRate, durationHours);
+    const coinsCost = 150;
     const calculatedPrice = Math.round(trainerRate * durationHours);
 
-    if (paymentMethod === "coins" && coinBalance < coinsCost) {
-      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this ${durationHours}-hour private session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
-      return;
+    if (paymentMethod === "coins") {
+      const currentUser = api.getCurrentUser();
+      if (api.hasUsedDailyCoinRedemption(currentUser?.id, sessionDate)) {
+        alert("Daily limit reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). You already have an active coin redemption on this date. Please switch to Direct Payment.");
+        return;
+      }
+      if (coinBalance < coinsCost) {
+        alert(`Insufficient coin balance. You have ${coinBalance} coins, but trainer redemption requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -417,7 +424,7 @@ export default function MemberTrainersPage() {
                           canAffordWithCoins ? "text-amber-400" : "text-slate-500"
                         }`}>
                           <Award className="w-3.5 h-3.5" />
-                          <span>{coinsCost} Coins</span>
+                          <span>150 Coins (1/day)</span>
                         </span>
                       </div>
                     </div>
@@ -466,7 +473,7 @@ export default function MemberTrainersPage() {
           <div className="divide-y divide-slate-800">
             {myBookings.map((b) => {
               const isCoins = b.paymentMethod === "coins" || b.coinsPaid !== undefined;
-              const coinsPaid = b.coinsPaid || api.calculateTrainerCoins(b.price || 75);
+              const coinsPaid = b.coinsPaid || 150;
 
               return (
                 <div key={b.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition">
@@ -584,10 +591,12 @@ export default function MemberTrainersPage() {
       {selectedTrainer && (() => {
         const durationHours = api.calculateDurationHours(startTime, endTime);
         const trainerRate = Number(selectedTrainer.hourlyRate) === 500 ? 80 : Number(selectedTrainer.hourlyRate);
-        const coinsCost = api.calculateTrainerCoins(trainerRate, durationHours);
+        const coinsCost = 150;
         const calculatedPrice = Math.round(trainerRate * durationHours);
         const hasSufficientCoins = coinBalance >= coinsCost;
         const isTimeValid = endTime > startTime;
+        const currentUser = api.getCurrentUser();
+        const isCoinUsedToday = api.hasUsedDailyCoinRedemption(currentUser?.id, sessionDate);
 
         return (
           <Modal
@@ -969,8 +978,10 @@ export default function MemberTrainersPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {hasSufficientCoins ? (
-                          <span className="text-emerald-400 font-medium">✓ Balance Sufficient</span>
+                        {isCoinUsedToday ? (
+                          <span className="text-amber-400 font-medium">⚠️ 1-day limit reached</span>
+                        ) : hasSufficientCoins ? (
+                          <span className="text-emerald-400 font-medium">✓ Steady 150 (1/day)</span>
                         ) : (
                           <span className="text-rose-400 font-medium">✗ Insufficient ({coinBalance}/{coinsCost})</span>
                         )}
@@ -1010,24 +1021,33 @@ export default function MemberTrainersPage() {
                 {/* Coin Balance Status Notification */}
                 {paymentMethod === "coins" && (
                   <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 transition ${
-                    hasSufficientCoins
+                    isCoinUsedToday
+                      ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
+                      : hasSufficientCoins
                       ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
                       : "bg-rose-950/40 border-rose-500/40 text-rose-300"
                   }`}>
-                    {hasSufficientCoins ? (
+                    {isCoinUsedToday ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold text-white">Daily 1-Day Limit Reached:</strong> Members can use the 150 coins redemption for 1 day only (1 redemption per day). You already have an active coin booking for {sessionDate}. Please switch to Direct Payment.
+                        </div>
+                      </>
+                    ) : hasSufficientCoins ? (
                       <>
                         <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="font-bold text-white">Sufficient Balance:</strong> You have {coinBalance} coins.
-                          After this {durationHours}-hour reservation, your remaining balance will be{" "}
-                          <strong className="text-emerald-300">{coinBalance - coinsCost} coins</strong>.
+                          <strong className="font-bold text-white">Steady 150 Coins:</strong> You have {coinBalance} coins.
+                          Remaining balance after booking will be{" "}
+                          <strong className="text-emerald-300">{coinBalance - coinsCost} coins</strong> (1 redemption per day).
                         </div>
                       </>
                     ) : (
                       <>
                         <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="font-bold text-white">Insufficient Balance for Payment:</strong> This {durationHours}-hour private coach session requires{" "}
+                          <strong className="font-bold text-white">Insufficient Balance for Payment:</strong> This coach session requires{" "}
                           <strong className="text-white">{coinsCost} coins</strong>, but your balance is only{" "}
                           <strong className="text-rose-400">{coinBalance} coins</strong>. Please switch to Direct Payment or earn more coins through workouts.
                         </div>
@@ -1044,13 +1064,17 @@ export default function MemberTrainersPage() {
                 <Button
                   type="submit"
                   isLoading={submitting}
-                  disabled={(paymentMethod === "coins" && !hasSufficientCoins) || !isTimeValid}
+                  disabled={(paymentMethod === "coins" && (!hasSufficientCoins || isCoinUsedToday)) || !isTimeValid}
                   className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
                 >
                   {!isTimeValid
                     ? "Invalid Time Range (End Time must be after Start Time)"
                     : paymentMethod === "coins"
-                    ? (hasSufficientCoins ? `Redeem ${coinsCost} Coins & Book Coach` : `Insufficient Coins (${coinBalance}/${coinsCost})`)
+                    ? isCoinUsedToday
+                      ? "Daily Coin Limit Reached (1/day)"
+                      : hasSufficientCoins
+                      ? `Redeem ${coinsCost} Coins & Book Coach`
+                      : `Insufficient Coins (${coinBalance}/${coinsCost})`
                     : `Confirm Coach Reservation (₱${calculatedPrice.toFixed(2)})`}
                 </Button>
               </div>

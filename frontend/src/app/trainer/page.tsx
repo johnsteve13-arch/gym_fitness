@@ -1376,7 +1376,7 @@ export default function TrainerDashboardPage() {
                           {s.paymentMethod === "coins" || s.coinsPaid ? (
                             <Badge variant="warning" className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/40 flex items-center gap-1 font-bold">
                               <Award className="w-3 h-3" />
-                              <span>Redeemed via Coins ({s.coinsPaid || api.calculateTrainerCoins(sessionEffectivePrice || 80)} Coins)</span>
+                              <span>Redeemed via Coins ({s.coinsPaid || 150} Coins)</span>
                             </Badge>
                           ) : (
                             <Badge variant="neutral" className="text-[10px]">
@@ -1405,7 +1405,7 @@ export default function TrainerDashboardPage() {
                               <span className="text-emerald-400 font-bold">100% Refunded / Protected</span>
                             ) : s.paymentMethod === "coins" || s.coinsPaid ? (
                               <span className="text-amber-400 font-bold">
-                                🪙 {s.coinsPaid || api.calculateTrainerCoins(sessionEffectivePrice || 80)} Coins (Redeemed)
+                                🪙 {s.coinsPaid || 150} Coins (Redeemed)
                               </span>
                             ) : (
                               <span className="text-white font-bold">{priceDisplay}</span>
@@ -1502,7 +1502,7 @@ export default function TrainerDashboardPage() {
             ? `${bookingToDecline.member.user.firstName} ${bookingToDecline.member.user.lastName || ""}`.trim()
             : (bookingToDecline.memberName || "Athlete");
           const isCoins = bookingToDecline.paymentMethod === "coins" || bookingToDecline.coinsPaid !== undefined;
-          const coinsAmount = bookingToDecline.coinsPaid || api.calculateTrainerCoins(bookingToDecline.price || 75);
+          const coinsAmount = bookingToDecline.coinsPaid || 150;
 
           return (
             <Modal

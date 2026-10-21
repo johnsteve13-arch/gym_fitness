@@ -24,6 +24,7 @@ import {
   Sparkles,
   ArrowRight,
   Target,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function MemberWorkoutsPage() {
@@ -119,10 +120,17 @@ export default function MemberWorkoutsPage() {
     }
 
     const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
-    const coinsCost = api.calculateTrainerCoins(coachRate);
-    if (paymentMethod === "coins" && coinBalance < coinsCost) {
-      alert(`Insufficient coin balance. You have ${coinBalance} coins, but this session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
-      return;
+    const coinsCost = 150;
+    if (paymentMethod === "coins") {
+      const currentUser = api.getCurrentUser();
+      if (api.hasUsedDailyCoinRedemption(currentUser?.id, sessionDate)) {
+        alert("Daily limit reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). You already have an active coin redemption on this date. Please switch to Direct Payment.");
+        return;
+      }
+      if (coinBalance < coinsCost) {
+        alert(`Insufficient coin balance. You have ${coinBalance} coins, but trainer redemption requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
+        return;
+      }
     }
 
     setBookingTrainer(true);
@@ -455,8 +463,10 @@ export default function MemberWorkoutsPage() {
 
           {chosenCoach && (() => {
             const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
-            const coachCoins = api.calculateTrainerCoins(coachRate);
+            const coachCoins = 150;
             const hasSufficient = coinBalance >= coachCoins;
+            const currentUser = api.getCurrentUser();
+            const isCoinUsedToday = api.hasUsedDailyCoinRedemption(currentUser?.id, sessionDate);
 
             return (
               <div className="space-y-3 pt-1 border-t border-slate-800">
@@ -490,8 +500,10 @@ export default function MemberWorkoutsPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {hasSufficient ? (
-                          <span className="text-emerald-400 font-medium">✓ Sufficient</span>
+                        {isCoinUsedToday ? (
+                          <span className="text-amber-400 font-medium">⚠️ 1-day limit reached</span>
+                        ) : hasSufficient ? (
+                          <span className="text-emerald-400 font-medium">✓ Steady 150 (1/day)</span>
                         ) : (
                           <span className="text-rose-400 font-medium">✗ Insufficient ({coinBalance}/{coachCoins})</span>
                         )}
@@ -529,17 +541,26 @@ export default function MemberWorkoutsPage() {
 
                 {paymentMethod === "coins" && (
                   <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
-                    hasSufficient
+                    isCoinUsedToday
+                      ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
+                      : hasSufficient
                       ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
                       : "bg-rose-950/40 border-rose-500/40 text-rose-300"
                   }`}>
-                    {hasSufficient ? (
+                    {isCoinUsedToday ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold text-white">Daily 1-Day Limit Reached:</strong> Members can use the 150 coins redemption for 1 day only (1 redemption per day). You already have an active coin reservation for {sessionDate}. Please switch to Direct Payment.
+                        </div>
+                      </>
+                    ) : hasSufficient ? (
                       <>
                         <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="font-bold text-white">Sufficient Balance:</strong> {coinBalance} coins available.
+                          <strong className="font-bold text-white">Steady 150 Coins:</strong> {coinBalance} coins available.
                           Remaining balance after booking:{" "}
-                          <strong className="text-emerald-300">{coinBalance - coachCoins} coins</strong>.
+                          <strong className="text-emerald-300">{coinBalance - coachCoins} coins</strong> (1 redemption per day).
                         </div>
                       </>
                     ) : (
@@ -562,21 +583,32 @@ export default function MemberWorkoutsPage() {
             <Button type="button" variant="secondary" onClick={() => setIsTrainerModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              isLoading={bookingTrainer}
-              disabled={
-                trainers.length === 0 ||
-                (paymentMethod === "coins" && chosenCoach && coinBalance < api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate))
-              }
-              className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
-            >
-              {paymentMethod === "coins"
-                ? (chosenCoach && coinBalance < api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate)
-                    ? `Insufficient Coins (${coinBalance}/${api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate)})`
-                    : `Redeem Coins & Book Coach`)
-                : "Confirm Coach for Workout"}
-            </Button>
+            {chosenCoach && (() => {
+              const coachCoins = 150;
+              const hasSufficient = coinBalance >= coachCoins;
+              const currentUser = api.getCurrentUser();
+              const isCoinUsedToday = api.hasUsedDailyCoinRedemption(currentUser?.id, sessionDate);
+
+              return (
+                <Button
+                  type="submit"
+                  isLoading={bookingTrainer}
+                  disabled={
+                    trainers.length === 0 ||
+                    (paymentMethod === "coins" && (!hasSufficient || isCoinUsedToday))
+                  }
+                  className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
+                >
+                  {paymentMethod === "coins"
+                    ? isCoinUsedToday
+                      ? "Daily Coin Limit Reached (1/day)"
+                      : hasSufficient
+                      ? `Redeem ${coachCoins} Coins & Book Coach`
+                      : `Insufficient Coins (${coinBalance}/${coachCoins})`
+                    : "Confirm Coach for Workout"}
+                </Button>
+              );
+            })()}
           </div>
         </form>
       </Modal>

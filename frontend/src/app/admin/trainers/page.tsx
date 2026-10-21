@@ -1079,7 +1079,7 @@ export default function AdminTrainersPage() {
 
                   {/* Loyalty Coin Rate Tag */}
                   <div className="absolute bottom-3 left-3 bg-amber-500/20 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-300 border border-amber-500/40">
-                    🪙 {api.calculateTrainerCoins(t.hourlyRate)} Coins / hr
+                    🪙 150 Coins (1/day)
                   </div>
                 </div>
 

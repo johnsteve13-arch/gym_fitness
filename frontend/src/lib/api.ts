@@ -1521,11 +1521,56 @@ class ApiClient {
     return `${mins} min${mins > 1 ? "s" : ""}`;
   }
 
-  calculateTrainerCoins(hourlyRate: number | string, durationHours: number = 1): number {
-    const rawRate = Number(hourlyRate);
-    const rate = rawRate === 500 || !rawRate ? 80 : rawRate;
-    const base = rate > 200 ? Math.round(rate / 5) : Math.max(50, Math.round(rate));
-    return Math.round(base * durationHours);
+  calculateTrainerCoins(_hourlyRate?: number | string, _durationHours: number = 1): number {
+    // Steady to 150 coins only
+    return 150;
+  }
+
+  hasUsedDailyCoinRedemption(memberIdOrEmail?: string, sessionDate?: string): boolean {
+    if (typeof window === "undefined") return false;
+    try {
+      const storedBookings = this.getStoredBookings();
+      const targetDate = (sessionDate || new Date().toISOString()).slice(0, 10);
+      const searchKey = (memberIdOrEmail || "").toLowerCase().trim();
+      const currentUser = this.getCurrentUser();
+      const userEmail = (currentUser?.email || "").toLowerCase().trim();
+      const userId = (currentUser?.id || "").toLowerCase().trim();
+
+      return storedBookings.some((b: any) => {
+        const bDate = (b.sessionDate || "").slice(0, 10);
+        if (bDate !== targetDate) return false;
+
+        const isMember =
+          (searchKey && (
+            (b.memberId && b.memberId.toLowerCase() === searchKey) ||
+            (b.memberEmail && b.memberEmail.toLowerCase() === searchKey) ||
+            (b.member?.id && b.member.id.toLowerCase() === searchKey) ||
+            (b.member?.userId && b.member.userId.toLowerCase() === searchKey) ||
+            (b.member?.user?.email && b.member.user.email.toLowerCase() === searchKey)
+          )) ||
+          (userEmail && (
+            (b.memberEmail && b.memberEmail.toLowerCase() === userEmail) ||
+            (b.member?.user?.email && b.member.user.email.toLowerCase() === userEmail)
+          )) ||
+          (userId && (
+            (b.memberId && b.memberId.toLowerCase() === userId) ||
+            (b.member?.id && b.member.id.toLowerCase() === userId) ||
+            (b.member?.userId && b.member.userId.toLowerCase() === userId)
+          ));
+
+        if (!isMember) return false;
+
+        const isCoinPayment =
+          b.paymentMethod === "coins" ||
+          Boolean(b.coinsPaid) ||
+          (typeof b.notes === "string" && b.notes.includes("Redeemed"));
+        const isActive = b.status !== "declined" && b.status !== "cancelled";
+
+        return isCoinPayment && isActive;
+      });
+    } catch {
+      return false;
+    }
   }
 
   getMemberCoins(memberId?: string): number {
@@ -1580,11 +1625,7 @@ class ApiClient {
   async bookTrainer(body: any): Promise<any> {
     const durationHours = this.calculateDurationHours(body.startTime, body.endTime || "11:00");
     const isCoins = body.paymentMethod === "coins";
-    const baseCoins = this.calculateTrainerCoins(body.price || 75, 1);
-    const coinsRequired =
-      body.coinsPaid !== undefined
-        ? Number(body.coinsPaid)
-        : Math.round(baseCoins * durationHours);
+    const coinsRequired = 150; // Steady to 150 coins only
     const calculatedPrice = Math.round(Number(body.price || 75) * durationHours);
 
     // 0. Check Admin Unavailability Override with custom description
@@ -1622,10 +1663,15 @@ class ApiClient {
     }
 
     if (isCoins) {
+      if (this.hasUsedDailyCoinRedemption(body.memberId || body.memberEmail, body.sessionDate)) {
+        throw new Error(
+          "Daily Limit Reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). You already have an active coin redemption for this date. Please choose Direct Payment."
+        );
+      }
       const currentCoins = this.getMemberCoins(body.memberId);
       if (currentCoins < coinsRequired) {
         throw new Error(
-          `Insufficient coin balance. You have ${currentCoins} coins, but this ${durationHours}-hour session requires ${coinsRequired} coins. Please choose cash/card or earn more coins.`
+          `Insufficient coin balance. You have ${currentCoins} coins, but trainer redemption requires ${coinsRequired} coins. Please choose Direct Payment or earn more coins.`
         );
       }
     }

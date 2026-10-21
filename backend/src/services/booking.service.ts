@@ -218,14 +218,28 @@ export class BookingService {
       const durationHours = Math.max(0.5, (endH * 60 + (endM || 0) - (startH * 60 + (startM || 0))) / 60);
 
       const calculatedPrice = Math.round(Number(trainer.hourlyRate) * durationHours);
-      const baseCoinRate = Math.max(50, Math.round(Number(trainer.hourlyRate) > 200 ? Number(trainer.hourlyRate) / 5 : Number(trainer.hourlyRate)));
       const isCoinsPayment = data.paymentMethod === "coins";
-      const coinsRequired =
-        data.coinsPaid !== undefined
-          ? Number(data.coinsPaid)
-          : Math.round(baseCoinRate * durationHours);
+      const coinsRequired = 150; // Steady to 150 coins only
 
       if (isCoinsPayment) {
+        // Enforce 1-day redemption limit: members can use the 150 coins redemption for 1 day only
+        const existingCoinBooking = await tx.trainerBooking.findFirst({
+          where: {
+            memberId: data.memberId,
+            sessionDate: sessionDate,
+            status: { notIn: ["declined", "cancelled"] },
+            OR: [
+              { notes: { contains: "Redeemed" } },
+              { notes: { contains: "Coins" } },
+            ],
+          },
+        });
+        if (existingCoinBooking) {
+          throw new Error(
+            "Daily Limit Reached: Members can use the 150 coins redemption for 1 day only (1 redemption per day). Please use Direct Payment for additional sessions on this date."
+          );
+        }
+
         const member = await tx.member.findUnique({
           where: { id: data.memberId },
           include: { user: true },
@@ -234,7 +248,7 @@ export class BookingService {
 
         if (member.rewardCoins < coinsRequired) {
           throw new Error(
-            `Insufficient coin balance. You have ${member.rewardCoins} coins, but this ${durationHours}-hour booking requires ${coinsRequired} coins.`
+            `Insufficient coin balance. You have ${member.rewardCoins} coins, but trainer redemption requires ${coinsRequired} coins.`
           );
         }
 
@@ -404,7 +418,7 @@ export class BookingService {
       const isCoinsRedemption = booking.notes?.includes("Redeemed") || booking.notes?.includes("Coins");
       if (isCoinsRedemption) {
         const match = booking.notes?.match(/Redeemed\s+(\d+)\s+Coins/i);
-        const coinsAmount = match ? parseInt(match[1], 10) : 50;
+        const coinsAmount = match ? parseInt(match[1], 10) : 150;
         await prisma.member.update({
           where: { id: booking.memberId },
           data: { rewardCoins: { increment: coinsAmount } },
