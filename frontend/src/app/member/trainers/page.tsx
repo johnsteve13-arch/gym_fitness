@@ -574,23 +574,29 @@ export default function MemberTrainersPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Session Date</label>
-                <input
-                  type="date"
-                  value={sessionDate}
-                  min={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setSessionDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Time to Start</span>
+                    <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Session Date</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={sessionDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setSessionDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 font-mono"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Start Time</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-normal">Time to Start</span>
                   </label>
                   <input
                     type="time"
@@ -610,9 +616,12 @@ export default function MemberTrainersPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Time to Finish</span>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>End Time</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-normal">Time to Finish</span>
                   </label>
                   <input
                     type="time"
@@ -626,6 +635,39 @@ export default function MemberTrainersPage() {
                 </div>
               </div>
 
+              {/* Quick Duration Presets for End Time */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 text-[11px] font-medium">Quick End Time Presets:</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { label: "+1 hr", hours: 1 },
+                    { label: "+1.5 hrs", hours: 1.5 },
+                    { label: "+2 hrs", hours: 2 },
+                    { label: "+3 hrs", hours: 3 },
+                  ].map((preset) => {
+                    const [sH, sM] = (startTime || "10:00").split(":").map(Number);
+                    const totalMins = (sH || 10) * 60 + (sM || 0) + Math.round(preset.hours * 60);
+                    const targetEnd = `${Math.floor((totalMins / 60) % 24).toString().padStart(2, "0")}:${(totalMins % 60).toString().padStart(2, "0")}`;
+                    const isActive = endTime === targetEnd;
+
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setEndTime(targetEnd)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition border ${
+                          isActive
+                            ? "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500/40"
+                            : "bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700"
+                        }`}
+                      >
+                        {preset.label} ({targetEnd})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Dynamic Duration and Pricing Preview */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs px-3.5 py-2.5 rounded-lg bg-slate-950/80 border border-slate-800">
                 <span className="text-slate-300 flex items-center gap-1.5">
@@ -633,7 +675,7 @@ export default function MemberTrainersPage() {
                   <span>
                     It takes <strong className="text-white">{api.formatDurationText(startTime, endTime)}</strong> from start to finish
                     <span className="text-slate-500 text-[11px] block sm:inline sm:ml-1">
-                      (Start: {startTime} → Finish: {endTime})
+                      (Start: {startTime} → End: {endTime})
                     </span>
                   </span>
                 </span>
@@ -645,7 +687,7 @@ export default function MemberTrainersPage() {
               {!isTimeValid && (
                 <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 text-[11px] text-rose-300 flex items-center gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  <span>Invalid Time Range: &ldquo;Time to Finish&rdquo; must be later than &ldquo;Time to Start&rdquo;.</span>
+                  <span>Invalid Time Range: &ldquo;End Time&rdquo; must be later than &ldquo;Start Time&rdquo;.</span>
                 </div>
               )}
 
@@ -863,7 +905,7 @@ export default function MemberTrainersPage() {
                   className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
                 >
                   {!isTimeValid
-                    ? "Invalid Time Range (Until > From)"
+                    ? "Invalid Time Range (End Time must be after Start Time)"
                     : paymentMethod === "coins"
                     ? (hasSufficientCoins ? `Redeem ${coinsCost} Coins & Book Coach` : `Insufficient Coins (${coinBalance}/${coinsCost})`)
                     : `Confirm Coach Reservation (₱${calculatedPrice.toFixed(2)})`}
