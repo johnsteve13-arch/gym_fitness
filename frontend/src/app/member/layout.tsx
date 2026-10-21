@@ -48,7 +48,6 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
 
   const navItems = [
     { label: "Overview & Pass", href: "/member", icon: QrCode },
-    { label: "Attendance Log", href: "/member/attendance", icon: Clock },
     { label: "Membership Package", href: "/member/package", icon: ShieldCheck },
     { label: "Workout Logger", href: "/member/workouts", icon: Dumbbell },
     { label: "Personal Trainers", href: "/member/trainers", icon: UserCheck },
