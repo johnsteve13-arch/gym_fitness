@@ -151,4 +151,44 @@ export class BookingController {
       return sendError(res, err.message, 500);
     }
   }
+
+  static async setTrainerUnavailability(req: Request, res: Response, next: NextFunction) {
+    try {
+      const trainerId = req.params.id;
+      const { trainerName, date, isFullDay, startTime, endTime, reasonCategory, description } = req.body;
+      const unavail = await BookingService.setTrainerUnavailability({
+        trainerId,
+        trainerName: trainerName || "Coach",
+        date: date || new Date().toISOString().slice(0, 10),
+        isFullDay: isFullDay !== undefined ? isFullDay : true,
+        startTime,
+        endTime,
+        reasonCategory: reasonCategory || "General",
+        description: description || "Trainer is unavailable as marked by Admin.",
+      });
+      return sendSuccess(res, unavail, "Trainer unavailability registered successfully.");
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
+
+  static async listTrainerUnavailabilities(req: Request, res: Response, next: NextFunction) {
+    try {
+      const trainerId = req.query.trainerId as string;
+      const unavailabilities = await BookingService.listTrainerUnavailabilities(trainerId);
+      return sendSuccess(res, unavailabilities);
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
+
+  static async deleteTrainerUnavailability(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id;
+      const result = await BookingService.deleteTrainerUnavailability(id);
+      return sendSuccess(res, result, "Trainer availability restored.");
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
 }

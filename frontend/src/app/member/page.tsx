@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "@/lib/api";
-import { Member, Trainer } from "@/types";
+import { Member, Trainer, TrainerUnavailability } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -49,7 +49,14 @@ export default function MemberOverviewPage() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   const [availabilityData, setAvailabilityData] = useState<{
-    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" }[];
+    slots: {
+      startTime: string;
+      endTime: string;
+      isAvailable: boolean;
+      status: "available" | "booked" | "outside_hours" | "unavailable";
+      adminDescription?: string | null;
+    }[];
+    adminUnavailability?: TrainerUnavailability | null;
   } | null>(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
@@ -62,7 +69,7 @@ export default function MemberOverviewPage() {
         .catch(() => setAvailabilityData(null))
         .finally(() => setLoadingAvailability(false));
     }
-  }, [selectedTrainerId, sessionDate, isQuickBookOpen]);
+  }, [selectedTrainerId, sessionDate, startTime, endTime, isQuickBookOpen]);
 
   useEffect(() => {
     const user = api.getCurrentUser();
@@ -690,8 +697,38 @@ export default function MemberOverviewPage() {
               </div>
             </div>
 
+            {/* Admin Notice Banner if Trainer Marked Unavailable */}
+            {availabilityData?.adminUnavailability && (
+              <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-600/60 text-amber-200 text-xs shadow-lg space-y-1.5 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-amber-100 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span>Admin Notice: Coach Unavailable</span>
+                        <Badge variant="warning" className="text-[9px] py-0 px-1.5">
+                          {availabilityData.adminUnavailability.isFullDay
+                            ? "Full Day Locked"
+                            : `${availabilityData.adminUnavailability.startTime} - ${availabilityData.adminUnavailability.endTime}`}
+                        </Badge>
+                      </span>
+                      <span className="text-[10px] text-amber-400 font-mono">
+                        {availabilityData.adminUnavailability.date}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-100 text-xs font-medium leading-relaxed">
+                      <strong>Admin Description:</strong> &ldquo;{availabilityData.adminUnavailability.description}&rdquo;
+                    </p>
+                    <p className="text-[10px] text-amber-400/90 mt-0.5">
+                      Category: <span className="font-semibold text-white capitalize">{availabilityData.adminUnavailability.reasonCategory.replace(/_/g, " ")}</span> • This coach has an administrative unavailability override. Matching hours are locked.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <p className="text-[11px] text-slate-400">
-              Select an open time slot below. Each slot shows the exact Start Time and End Time. Booked slots are locked in real-time.
+              Select an open time slot below. Each slot shows the exact Start Time and End Time. Booked and Admin-restricted slots are locked in real-time.
             </p>
 
             {/* END TIME & REAL-TIME AVAILABILITY WINDOW BAR */}
@@ -742,19 +779,23 @@ export default function MemberOverviewPage() {
                 { startTime: "17:00", endTime: "18:00", isAvailable: true, status: "available" },
               ]).map((slot: any) => {
                 const isSelected = startTime === slot.startTime && endTime === slot.endTime;
-                const isBooked = !slot.isAvailable || slot.status === "booked";
+                const isUnavailable = slot.status === "unavailable" || !!slot.adminDescription;
+                const isBooked = !slot.isAvailable && !isUnavailable;
+                const isBlocked = isBooked || isUnavailable;
 
                 return (
                   <button
                     key={slot.startTime}
                     type="button"
-                    disabled={isBooked}
+                    disabled={isBlocked}
                     onClick={() => {
                       setStartTime(slot.startTime);
                       setEndTime(slot.endTime);
                     }}
                     className={`p-2.5 rounded-xl text-left transition border flex flex-col justify-between gap-2 ${
-                      isBooked
+                      isUnavailable
+                        ? "bg-amber-950/30 border-amber-800/50 text-slate-400 cursor-not-allowed opacity-80"
+                        : isBooked
                         ? "bg-slate-950/80 border-rose-950 text-slate-500 cursor-not-allowed opacity-60"
                         : isSelected
                         ? "bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/40 shadow-sm"
@@ -765,7 +806,11 @@ export default function MemberOverviewPage() {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">
                         {slot.startTime < "12:00" ? "Morning" : slot.startTime < "17:00" ? "Afternoon" : "Evening"}
                       </span>
-                      {isBooked ? (
+                      {isUnavailable ? (
+                        <span className="text-[9px] text-amber-300 font-sans font-bold flex items-center gap-1 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/40">
+                          <Lock className="w-2.5 h-2.5 text-amber-400" /> Unavailable
+                        </span>
+                      ) : isBooked ? (
                         <span className="text-[9px] text-rose-400 font-sans font-bold flex items-center gap-0.5">
                           <Lock className="w-2.5 h-2.5" /> Booked
                         </span>
@@ -792,10 +837,19 @@ export default function MemberOverviewPage() {
                       </div>
                     </div>
 
-                    <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-900">
-                      <span>Duration: 1 hr</span>
-                      <span className="text-[9px] font-sans text-slate-400">Click to select</span>
-                    </div>
+                    {isUnavailable ? (
+                      <div className="text-[10px] text-amber-300/90 flex flex-col pt-1 border-t border-slate-900 leading-tight">
+                        <span className="text-[9px] text-amber-500 font-semibold uppercase tracking-wider">Admin Reason:</span>
+                        <span className="truncate italic font-medium">
+                          &ldquo;{slot.adminDescription || availabilityData?.adminUnavailability?.description || "Marked unavailable by Admin"}&rdquo;
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-900">
+                        <span>Duration: 1 hr</span>
+                        <span className="text-[9px] font-sans text-slate-400">{isBooked ? "Locked" : "Click to select"}</span>
+                      </div>
+                    )}
                   </button>
                 );
               })}

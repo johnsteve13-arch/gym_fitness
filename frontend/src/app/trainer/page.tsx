@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { TrainerUnavailability } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -46,6 +47,7 @@ export default function TrainerDashboardPage() {
   const [actionSuccess, setActionSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed" | "declined">("all");
+  const [unavailabilities, setUnavailabilities] = useState<TrainerUnavailability[]>([]);
 
   // Decline Booking Modal State
   const [bookingToDecline, setBookingToDecline] = useState<any | null>(null);
@@ -107,6 +109,9 @@ export default function TrainerDashboardPage() {
         trainerEmail: user?.email,
       });
       setSessions(bookings);
+
+      const unavs = await api.getTrainerUnavailabilities(found?.id || user?.id);
+      setUnavailabilities(unavs);
     } catch (err) {
       console.error("Failed to load coach bookings", err);
     } finally {
@@ -980,6 +985,53 @@ export default function TrainerDashboardPage() {
           </div>
         </div>
 
+        {/* Active Unavailability Overrides Set by Admin */}
+        {unavailabilities.length > 0 && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-amber-950/40 border border-amber-600/50 space-y-3 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <h3 className="text-sm font-bold text-white">
+                  Active Admin Schedule Overrides ({unavailabilities.length})
+                </h3>
+              </div>
+              <Badge variant="warning" className="text-xs py-0.5 px-2">
+                Member Bookings Restricted
+              </Badge>
+            </div>
+            <p className="text-xs text-amber-200/90 leading-relaxed">
+              The gym administrator has placed official unavailability notices on your calendar. During these scheduled windows, member bookings are locked in real-time and the admin&apos;s reason description below is displayed to athletes.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {unavailabilities.map((u) => (
+                <div key={u.id} className="p-3.5 rounded-xl bg-slate-950/80 border border-amber-600/30 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-white flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{u.date}</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                      {u.isFullDay ? "Full Day" : `${u.startTime} - ${u.endTime}`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
+                      Admin Description / Reason:
+                    </span>
+                    <p className="text-amber-200 italic font-medium mt-0.5">
+                      &ldquo;{u.description}&rdquo;
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-900 pt-1.5">
+                    <span>Category: <strong className="text-slate-300 capitalize">{u.reasonCategory.replace(/_/g, " ")}</strong></span>
+                    <span className="text-emerald-400 font-semibold">100% Payment Protected</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Quick Trainer Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

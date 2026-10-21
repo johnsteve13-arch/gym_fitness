@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Trainer } from "@/types";
+import { Trainer, TrainerUnavailability } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -57,10 +57,18 @@ export default function MemberTrainersPage() {
   const [availabilityData, setAvailabilityData] = useState<{
     workingHours: { startTime: string; endTime: string };
     bookedSlots: { startTime: string; endTime: string; status: string }[];
-    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" }[];
+    slots: {
+      startTime: string;
+      endTime: string;
+      isAvailable: boolean;
+      status: "available" | "booked" | "outside_hours" | "unavailable";
+      adminDescription?: string | null;
+    }[];
     alternativeTrainers: any[];
+    adminUnavailability?: TrainerUnavailability | null;
   } | null>(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [activeUnavailabilities, setActiveUnavailabilities] = useState<TrainerUnavailability[]>([]);
 
   // Declined Booking Modal State (Alternatives & Payment Protection)
   const [declinedModalOpen, setDeclinedModalOpen] = useState(false);
@@ -87,10 +95,19 @@ export default function MemberTrainersPage() {
     setCoinBalance(api.getMemberCoins(memberId));
   };
 
-  const fetchAvailability = async (trainerId: string, date: string, time?: string) => {
+  const loadUnavailabilities = async () => {
+    try {
+      const unavs = await api.getTrainerUnavailabilities();
+      setActiveUnavailabilities(unavs);
+    } catch (e) {
+      console.warn("Failed to load trainer unavailabilities:", e);
+    }
+  };
+
+  const fetchAvailability = async (trainerId: string, date: string, time?: string, end?: string) => {
     setLoadingAvailability(true);
     try {
-      const data = await api.getTrainerAvailability(trainerId, date, time);
+      const data = await api.getTrainerAvailability(trainerId, date, time, end);
       setAvailabilityData(data);
     } catch (e) {
       console.warn("Failed to fetch trainer availability:", e);
@@ -102,17 +119,18 @@ export default function MemberTrainersPage() {
   useEffect(() => {
     api.listTrainers().then(setTrainers);
     loadBookings();
+    loadUnavailabilities();
     setCoinBalance(api.getMemberCoins());
   }, []);
 
-  // Real-Time Availability fetch whenever selected trainer or date changes
+  // Real-Time Availability fetch whenever selected trainer, date, or time window changes
   useEffect(() => {
     if (selectedTrainer) {
-      fetchAvailability(selectedTrainer.id, sessionDate, startTime);
+      fetchAvailability(selectedTrainer.id, sessionDate, startTime, endTime);
     } else {
       setAvailabilityData(null);
     }
-  }, [selectedTrainer?.id, sessionDate]);
+  }, [selectedTrainer?.id, sessionDate, startTime, endTime]);
 
   const handleCancelBooking = async (bookingId: string) => {
     if (!confirm("Are you sure you want to cancel this booking? The trainer's slot will be freed immediately in real-time.")) return;
@@ -209,6 +227,7 @@ export default function MemberTrainersPage() {
       const errMsg = err?.message || "";
       const isDeclined =
         errMsg.includes("Booking Declined") ||
+        errMsg.includes("Booking Blocked") ||
         errMsg.includes("unavailable") ||
         errMsg.includes("conflict") ||
         errMsg.includes("reservation") ||
@@ -216,7 +235,7 @@ export default function MemberTrainersPage() {
 
       if (isDeclined) {
         // Collect alternative slots & coaches from current availability
-        const openSlots = availabilityData?.slots?.filter((s) => s.isAvailable).map((s) => s.startTime) || [];
+        const openSlots = availabilityData?.slots?.filter((s) => s.isAvailable && s.status !== "unavailable").map((s) => s.startTime) || [];
         const altTrainers = availabilityData?.alternativeTrainers || [];
 
         setDeclinedInfo({
@@ -224,7 +243,7 @@ export default function MemberTrainersPage() {
           date: sessionDate,
           startTime,
           endTime,
-          message: "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot.",
+          message: errMsg || "Booking Declined: The selected trainer is unavailable at your chosen date and time. Please select another trainer or choose a different time slot.",
           availableSlots: openSlots,
           alternativeTrainers: altTrainers,
         });
@@ -348,6 +367,9 @@ export default function MemberTrainersPage() {
           {filteredTrainers.map((t) => {
             const coinsCost = api.calculateTrainerCoins(t.hourlyRate);
             const canAffordWithCoins = coinBalance >= coinsCost;
+            const activeUnav = activeUnavailabilities.find(
+              (u) => (u.trainerId === t.id || u.trainerId === t.userId) && u.date === sessionDate
+            );
 
             return (
               <Card key={t.id} className="glass-card border-slate-800 overflow-hidden p-0 flex flex-col justify-between">
@@ -369,7 +391,19 @@ export default function MemberTrainersPage() {
                       Coach {t.user?.firstName} {t.user?.lastName}
                     </h3>
                     <div className="text-xs text-emerald-400 font-semibold mb-2">{t.specialization}</div>
-                    <p className="text-xs text-slate-400 mb-4 line-clamp-3">{t.bio}</p>
+                    <p className="text-xs text-slate-400 mb-3 line-clamp-3">{t.bio}</p>
+
+                    {activeUnav && (
+                      <div className="mb-3 p-2 rounded-lg bg-amber-950/60 border border-amber-600/40 text-[11px] text-amber-200">
+                        <div className="flex items-center gap-1 font-bold text-amber-300">
+                          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>Admin Notice ({activeUnav.isFullDay ? "Full Day" : `${activeUnav.startTime}-${activeUnav.endTime}`}):</span>
+                        </div>
+                        <div className="mt-0.5 text-slate-300 italic line-clamp-2">
+                          &ldquo;{activeUnav.description}&rdquo;
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-center text-xs text-slate-300 border-t border-slate-800 pt-3">
                       <div>
@@ -711,8 +745,38 @@ export default function MemberTrainersPage() {
                   </div>
                 </div>
 
+                {/* Admin Unavailability Notice Banner */}
+                {availabilityData?.adminUnavailability && (
+                  <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-600/60 text-amber-200 text-xs shadow-lg space-y-1.5 animate-in fade-in">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-amber-100 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                            <span>Admin Notice: Coach Unavailable</span>
+                            <Badge variant="warning" className="text-[9px] py-0 px-1.5">
+                              {availabilityData.adminUnavailability.isFullDay
+                                ? "Full Day Locked"
+                                : `${availabilityData.adminUnavailability.startTime} - ${availabilityData.adminUnavailability.endTime}`}
+                            </Badge>
+                          </span>
+                          <span className="text-[10px] text-amber-400 font-mono">
+                            {availabilityData.adminUnavailability.date}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-slate-100 text-xs font-medium leading-relaxed">
+                          <strong>Admin Description:</strong> &ldquo;{availabilityData.adminUnavailability.description}&rdquo;
+                        </p>
+                        <p className="text-[10px] text-amber-400/90 mt-0.5">
+                          Category: <span className="font-semibold text-white capitalize">{availabilityData.adminUnavailability.reasonCategory.replace(/_/g, " ")}</span> • This coach has been marked unavailable by Gym Administration. Matching time slots are locked in real-time.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-slate-400">
-                  Select an open time slot below. Each slot shows the exact Start Time and End Time. Booked slots are locked in real-time to prevent double booking.
+                  Select an open time slot below. Each slot shows the exact Start Time and End Time. Booked and Admin-restricted slots are locked in real-time to prevent double booking.
                 </p>
 
                 {/* END TIME & REAL-TIME AVAILABILITY WINDOW BAR */}
@@ -763,19 +827,23 @@ export default function MemberTrainersPage() {
                     { startTime: "17:00", endTime: "18:00", isAvailable: true, status: "available" },
                   ]).map((slot: any) => {
                     const isSelected = startTime === slot.startTime && endTime === slot.endTime;
-                    const isBooked = !slot.isAvailable || slot.status === "booked";
+                    const isUnavailable = slot.status === "unavailable" || !!slot.adminDescription;
+                    const isBooked = !slot.isAvailable && !isUnavailable;
+                    const isBlocked = isBooked || isUnavailable;
 
                     return (
                       <button
                         key={slot.startTime}
                         type="button"
-                        disabled={isBooked}
+                        disabled={isBlocked}
                         onClick={() => {
                           setStartTime(slot.startTime);
                           setEndTime(slot.endTime);
                         }}
                         className={`p-2.5 rounded-xl text-left transition border flex flex-col justify-between gap-2 ${
-                          isBooked
+                          isUnavailable
+                            ? "bg-amber-950/30 border-amber-800/50 text-slate-400 cursor-not-allowed opacity-80"
+                            : isBooked
                             ? "bg-slate-950/80 border-rose-950 text-slate-500 cursor-not-allowed opacity-60"
                             : isSelected
                             ? "bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/40 shadow-sm"
@@ -786,7 +854,11 @@ export default function MemberTrainersPage() {
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">
                             {slot.startTime < "12:00" ? "Morning" : slot.startTime < "17:00" ? "Afternoon" : "Evening"}
                           </span>
-                          {isBooked ? (
+                          {isUnavailable ? (
+                            <span className="text-[9px] text-amber-300 font-sans font-bold flex items-center gap-1 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/40">
+                              <Lock className="w-2.5 h-2.5 text-amber-400" /> Unavailable
+                            </span>
+                          ) : isBooked ? (
                             <span className="text-[9px] text-rose-400 font-sans font-bold flex items-center gap-0.5">
                               <Lock className="w-2.5 h-2.5" /> Booked
                             </span>
@@ -813,10 +885,19 @@ export default function MemberTrainersPage() {
                           </div>
                         </div>
 
-                        <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-900">
-                          <span>Duration: 1 hr</span>
-                          <span className="text-[9px] font-sans text-slate-400">Click to select</span>
-                        </div>
+                        {isUnavailable ? (
+                          <div className="text-[10px] text-amber-300/90 flex flex-col pt-1 border-t border-slate-900 leading-tight">
+                            <span className="text-[9px] text-amber-500 font-semibold uppercase tracking-wider">Admin Reason:</span>
+                            <span className="truncate italic font-medium">
+                              &ldquo;{slot.adminDescription || availabilityData?.adminUnavailability?.description || "Marked unavailable by Admin"}&rdquo;
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-900">
+                            <span>Duration: 1 hr</span>
+                            <span className="text-[9px] font-sans text-slate-400">{isBooked ? "Locked" : "Click to select"}</span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}

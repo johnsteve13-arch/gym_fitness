@@ -55,6 +55,20 @@ export interface Trainer {
   user?: User;
 }
 
+export interface TrainerUnavailability {
+  id: string;
+  trainerId: string;
+  trainerName: string;
+  date: string; // YYYY-MM-DD
+  isFullDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  reasonCategory: string; // "Seminar", "Sick Leave", "Floor Duty", "Vacation", "Personal"
+  description: string; // Admin's custom input description
+  createdAt: string;
+  createdBy?: string;
+}
+
 export interface MembershipPlan {
   id: string;
   name: string;

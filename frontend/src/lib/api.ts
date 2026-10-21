@@ -11,7 +11,7 @@ import {
   MOCK_PAYMENTS,
   MOCK_NOTIFICATIONS,
 } from "./mockData";
-import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus, DispatchedNotification } from "../types";
+import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus, DispatchedNotification, TrainerUnavailability } from "../types";
 import { generateSpecificAdvice } from "./ai-advice";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -1562,6 +1562,40 @@ class ApiClient {
         : Math.round(baseCoins * durationHours);
     const calculatedPrice = Math.round(Number(body.price || 75) * durationHours);
 
+    // 0. Check Admin Unavailability Override with custom description
+    const unavailabilities = this.getStoredTrainerUnavailabilities();
+    const dateStr = (body.sessionDate || "").slice(0, 10);
+    const adminUnavail = unavailabilities.find((u) => {
+      const isSameCoach =
+        u.trainerId === body.trainerId ||
+        u.trainerId === body.trainerUserId ||
+        (body.trainerName && u.trainerName && u.trainerName.toLowerCase().includes(body.trainerName.toLowerCase()));
+      if (!isSameCoach || u.date !== dateStr) return false;
+      if (u.isFullDay) return true;
+      const uStart = u.startTime || "08:00";
+      const uEnd = u.endTime || "18:00";
+      return body.startTime < uEnd && (body.endTime || "11:00") > uStart;
+    });
+
+    if (adminUnavail) {
+      const adminDeclineMsg = `Booking Blocked: Coach ${body.trainerName || "Trainer"} is marked unavailable by Admin. Reason: "${adminUnavail.description}".`;
+      this.saveDeclinedConflict({
+        id: `conflict-${Date.now()}`,
+        trainerId: body.trainerId,
+        trainerName: body.trainerName || "Coach",
+        memberId: body.memberId,
+        memberName: body.memberName || "Athlete",
+        sessionDate: dateStr,
+        startTime: body.startTime,
+        endTime: body.endTime || "11:00",
+        reason: `Admin Unavailability Override: ${adminUnavail.description}`,
+        paymentProtected: true,
+        status: "declined",
+        createdAt: new Date().toISOString(),
+      });
+      throw new Error(adminDeclineMsg);
+    }
+
     if (isCoins) {
       const currentCoins = this.getMemberCoins(body.memberId);
       if (currentCoins < coinsRequired) {
@@ -1886,6 +1920,81 @@ class ApiClient {
     }
   }
 
+  getStoredTrainerUnavailabilities(): TrainerUnavailability[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const val = localStorage.getItem("apex_trainer_unavailabilities");
+      return val ? JSON.parse(val) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveStoredTrainerUnavailability(item: TrainerUnavailability): void {
+    if (typeof window === "undefined") return;
+    try {
+      const current = this.getStoredTrainerUnavailabilities();
+      const filtered = current.filter((u) => u.id !== item.id);
+      filtered.unshift(item);
+      localStorage.setItem("apex_trainer_unavailabilities", JSON.stringify(filtered));
+    } catch (e) {
+      console.warn("Failed to save trainer unavailability:", e);
+    }
+  }
+
+  deleteStoredTrainerUnavailability(id: string): void {
+    if (typeof window === "undefined") return;
+    try {
+      const current = this.getStoredTrainerUnavailabilities();
+      const filtered = current.filter((u) => u.id !== id);
+      localStorage.setItem("apex_trainer_unavailabilities", JSON.stringify(filtered));
+    } catch (e) {
+      console.warn("Failed to delete trainer unavailability:", e);
+    }
+  }
+
+  async getTrainerUnavailabilities(trainerId?: string): Promise<TrainerUnavailability[]> {
+    try {
+      const q = trainerId ? `?trainerId=${encodeURIComponent(trainerId)}` : "";
+      const res = await this.request<TrainerUnavailability[]>(`/trainers/unavailabilities${q}`);
+      if (Array.isArray(res)) return res;
+    } catch {}
+    const stored = this.getStoredTrainerUnavailabilities();
+    if (trainerId) {
+      return stored.filter((u) => u.trainerId === trainerId);
+    }
+    return stored;
+  }
+
+  async setTrainerUnavailability(data: Omit<TrainerUnavailability, "id" | "createdAt">): Promise<TrainerUnavailability> {
+    const newRecord: TrainerUnavailability = {
+      id: `unavail-${Date.now()}`,
+      ...data,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      const res = await this.request<TrainerUnavailability>(`/trainers/${data.trainerId}/unavailability`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (res && res.id) {
+        this.saveStoredTrainerUnavailability(res);
+        return res;
+      }
+    } catch {}
+
+    this.saveStoredTrainerUnavailability(newRecord);
+    return newRecord;
+  }
+
+  async removeTrainerUnavailability(id: string): Promise<{ success: boolean }> {
+    try {
+      await this.request(`/trainers/unavailability/${id}`, { method: "DELETE" });
+    } catch {}
+    this.deleteStoredTrainerUnavailability(id);
+    return { success: true };
+  }
+
   async getTrainerAvailability(
     trainerId: string,
     sessionDate: string,
@@ -1896,8 +2005,9 @@ class ApiClient {
     sessionDate: string;
     workingHours: { startTime: string; endTime: string };
     bookedSlots: { startTime: string; endTime: string; status: string }[];
-    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" }[];
+    slots: { startTime: string; endTime: string; isAvailable: boolean; status: "available" | "booked" | "outside_hours" | "unavailable"; adminDescription?: string | null }[];
     alternativeTrainers: { id: string; name: string; specialization: string; hourlyRate: number; rating: number; avatarUrl?: string }[];
+    adminUnavailability?: TrainerUnavailability | null;
   }> {
     const dateStr = sessionDate.slice(0, 10);
     try {
@@ -1908,7 +2018,7 @@ class ApiClient {
       if (res && res.slots) return res;
     } catch {}
 
-    // Fallback using stored bookings
+    // Fallback using stored bookings & admin unavailabilities
     const storedBookings = this.getStoredBookings();
     const activeOnDate = storedBookings.filter((b: any) => {
       const bDate = (b.sessionDate || "").slice(0, 10);
@@ -1920,16 +2030,35 @@ class ApiClient {
       return isSameTrainer && isActive && bDate === dateStr;
     });
 
+    const unavailabilities = this.getStoredTrainerUnavailabilities().filter(
+      (u) => (u.trainerId === trainerId || !u.trainerId) && u.date === dateStr
+    );
+    const activeAdminUnavail = unavailabilities.length > 0 ? unavailabilities[0] : null;
+
     const standardSlots = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
     const slots = standardSlots.map((slot) => {
       const [h, m] = slot.split(":");
       const slotEnd = `${(parseInt(h, 10) + 1).toString().padStart(2, "0")}:${m}`;
       const conflict = activeOnDate.find((b: any) => slot < (b.endTime || "11:00") && slotEnd > b.startTime);
+
+      const unavail = unavailabilities.find((u) => {
+        if (u.isFullDay) return true;
+        const uStart = u.startTime || "08:00";
+        const uEnd = u.endTime || "18:00";
+        return slot < uEnd && slotEnd > uStart;
+      });
+
+      const isAvailable = !conflict && !unavail;
       return {
         startTime: slot,
         endTime: slotEnd,
-        isAvailable: !conflict,
-        status: (conflict ? "booked" : "available") as "available" | "booked" | "outside_hours",
+        isAvailable,
+        status: unavail
+          ? ("unavailable" as const)
+          : conflict
+          ? ("booked" as const)
+          : ("available" as const),
+        adminDescription: unavail ? unavail.description : null,
       };
     });
 
@@ -1969,6 +2098,7 @@ class ApiClient {
       })),
       slots,
       alternativeTrainers,
+      adminUnavailability: activeAdminUnavail,
     };
   }
 

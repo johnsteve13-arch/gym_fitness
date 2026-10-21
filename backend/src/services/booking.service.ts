@@ -3,7 +3,60 @@ import { ENV } from "../config/env";
 import bcrypt from "bcryptjs";
 import { NotificationService } from "./notification.service";
 
+export interface TrainerUnavailabilityRecord {
+  id: string;
+  trainerId: string;
+  trainerName: string;
+  date: string; // YYYY-MM-DD
+  isFullDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  reasonCategory: string;
+  description: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
 export class BookingService {
+  private static trainerUnavailabilities: TrainerUnavailabilityRecord[] = [];
+
+  static async setTrainerUnavailability(record: Omit<TrainerUnavailabilityRecord, "id" | "createdAt">): Promise<TrainerUnavailabilityRecord> {
+    const newRecord: TrainerUnavailabilityRecord = {
+      id: `unavail-${Date.now()}`,
+      ...record,
+      createdAt: new Date().toISOString(),
+    };
+    this.trainerUnavailabilities.unshift(newRecord);
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: record.trainerId,
+          action: "TRAINER_UNAVAILABILITY_SET",
+          entity: "trainers",
+          entityId: record.trainerId,
+          details: JSON.stringify(newRecord),
+        },
+      });
+    } catch {}
+
+    return newRecord;
+  }
+
+  static async listTrainerUnavailabilities(trainerId?: string): Promise<TrainerUnavailabilityRecord[]> {
+    if (trainerId) {
+      return this.trainerUnavailabilities.filter((u) => u.trainerId === trainerId);
+    }
+    return this.trainerUnavailabilities;
+  }
+
+  static async deleteTrainerUnavailability(id: string): Promise<{ success: boolean }> {
+    const idx = this.trainerUnavailabilities.findIndex((u) => u.id === id);
+    if (idx !== -1) {
+      this.trainerUnavailabilities.splice(idx, 1);
+    }
+    return { success: true };
+  }
   static async listTrainers(params?: { includePending?: boolean }) {
     const where: any = {};
     if (!params?.includePending) {
@@ -94,6 +147,20 @@ export class BookingService {
           isWithinHours = false;
           declineReason = `Requested time slot (${data.startTime} - ${data.endTime}) is outside coach working hours (${schedule.startTime} - ${schedule.endTime}).`;
         }
+      }
+
+      // B.2 Check Admin Unavailability Override with custom description
+      const adminUnavail = BookingService.trainerUnavailabilities.find((u) => {
+        if (u.trainerId !== data.trainerId || u.date !== dateStr) return false;
+        if (u.isFullDay) return true;
+        const uStart = u.startTime || "08:00";
+        const uEnd = u.endTime || "18:00";
+        return data.startTime < uEnd && data.endTime > uStart;
+      });
+
+      if (adminUnavail) {
+        isWithinHours = false;
+        declineReason = `Coach ${trainer.user?.firstName || "Trainer"} is marked unavailable by Admin: "${adminUnavail.description}".`;
       }
 
       // C. Double-booking conflict check:
@@ -667,6 +734,11 @@ export class BookingService {
       isActive: true,
     };
 
+    const adminUnavailabilities = this.trainerUnavailabilities.filter(
+      (u) => u.trainerId === params.trainerId && u.date === dateStr
+    );
+    const activeAdminUnavail = adminUnavailabilities.length > 0 ? adminUnavailabilities[0] : null;
+
     const standardSlots = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
     const slots = standardSlots.map((slot) => {
       const [h, m] = slot.split(":");
@@ -675,14 +747,29 @@ export class BookingService {
 
       const conflict = bookings.find((b) => slot < b.endTime && slotEnd > b.startTime);
       const isWithinHours = slot >= schedule.startTime && slotEnd <= schedule.endTime;
-      const isAvailable = !conflict && isWithinHours;
+
+      const unavail = adminUnavailabilities.find((u) => {
+        if (u.isFullDay) return true;
+        const uStart = u.startTime || "08:00";
+        const uEnd = u.endTime || "18:00";
+        return slot < uEnd && slotEnd > uStart;
+      });
+
+      const isAvailable = !conflict && isWithinHours && !unavail;
 
       return {
         startTime: slot,
         endTime: slotEnd,
         isAvailable,
-        status: conflict ? "booked" : (!isWithinHours ? "outside_hours" : "available"),
+        status: unavail
+          ? "unavailable"
+          : conflict
+          ? "booked"
+          : !isWithinHours
+          ? "outside_hours"
+          : "available",
         bookingStatus: conflict?.status || null,
+        adminDescription: unavail ? unavail.description : null,
       };
     });
 
@@ -729,6 +816,7 @@ export class BookingService {
       bookedSlots: bookings,
       slots,
       alternativeTrainers,
+      adminUnavailability: activeAdminUnavail,
     };
   }
 
