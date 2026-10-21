@@ -1109,7 +1109,9 @@ export default function TrainerDashboardPage() {
                   `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(athleteName)}`;
                 const sessionFocus = s.sessionType || "1-on-1 Fitness Coaching";
                 const sessionDateFormatted = s.sessionDate || "Scheduled Date";
-                const sessionTimeFormatted = `${s.startTime || "10:00"} – ${s.endTime || "11:00"}`;
+                const startTimeFormatted = s.startTime || "10:00";
+                const endTimeFormatted = s.endTime || "11:00";
+                const durationText = api.formatDurationText(startTimeFormatted, endTimeFormatted);
                 const priceDisplay = s.price ? `₱${Number(s.price).toFixed(2)}` : hourlyRate;
 
                 return (
@@ -1165,10 +1167,15 @@ export default function TrainerDashboardPage() {
                             <Calendar className="w-3.5 h-3.5 shrink-0" />
                             <span>{sessionDateFormatted}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
-                            <Clock className="w-3.5 h-3.5 shrink-0" />
-                            <span>{sessionTimeFormatted}</span>
+                          <div className="flex items-center gap-1.5 text-amber-300 font-semibold font-mono">
+                            <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                            <span>Time to Start: <strong className="text-white">{startTimeFormatted}</strong></span>
+                            <span className="text-slate-600">→</span>
+                            <span>Time to Finish: <strong className="text-white">{endTimeFormatted}</strong></span>
                           </div>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-semibold">
+                            Takes {durationText} from start to finish
+                          </span>
                           <div className="text-slate-400 font-medium">
                             Payment:{" "}
                             {isDeclined ? (
@@ -1300,8 +1307,8 @@ export default function TrainerDashboardPage() {
                   </div>
                   <div className="flex justify-between text-slate-400">
                     <span>Session Slot:</span>
-                    <strong className="text-white">
-                      📅 {bookingToDecline.sessionDate} • ⏰ {bookingToDecline.startTime} – {bookingToDecline.endTime}
+                    <strong className="text-white text-right">
+                      📅 {bookingToDecline.sessionDate} • Time to Start: {bookingToDecline.startTime} → Time to Finish: {bookingToDecline.endTime} ({api.formatDurationText(bookingToDecline.startTime, bookingToDecline.endTime)} from start to finish)
                     </strong>
                   </div>
                   <div className="flex justify-between text-slate-400">

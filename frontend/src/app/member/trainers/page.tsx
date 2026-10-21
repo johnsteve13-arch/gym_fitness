@@ -134,11 +134,12 @@ export default function MemberTrainersPage() {
     if (!selectedTrainer) return;
 
     if (endTime <= startTime) {
-      alert("Invalid session duration: 'Time Until' must be later than 'Time From'.");
+      alert("Invalid session duration: 'Time to Finish' must be later than 'Time to Start'.");
       return;
     }
 
     const durationHours = api.calculateDurationHours(startTime, endTime);
+    const durationText = api.formatDurationText(startTime, endTime);
     const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate, durationHours);
     const calculatedPrice = Math.round(Number(selectedTrainer.hourlyRate) * durationHours);
 
@@ -187,11 +188,11 @@ export default function MemberTrainersPage() {
 
       if (paymentMethod === "coins") {
         setActionSuccess(
-          `Personal Trainer booked! Successfully redeemed ${coinsCost} coins for Coach ${selectedTrainer.user?.firstName} (${durationHours} hrs, ${startTime} - ${endTime}). Remaining balance: ${updatedCoins} coins.`
+          `Personal Trainer booked! Successfully redeemed ${coinsCost} coins for Coach ${selectedTrainer.user?.firstName} (Time to Start: ${startTime} • Time to Finish: ${endTime} — Takes ${durationText} from start to finish). Remaining balance: ${updatedCoins} coins.`
         );
       } else {
         setActionSuccess(
-          `Personal Trainer booked! Coach ${selectedTrainer.user?.firstName} reserved for ${durationHours} hrs (${startTime} - ${endTime}) on ${sessionDate} (₱${calculatedPrice.toFixed(2)} PHP)!`
+          `Personal Trainer booked! Coach ${selectedTrainer.user?.firstName} reserved (Time to Start: ${startTime} • Time to Finish: ${endTime} — Takes ${durationText} from start to finish) on ${sessionDate} (₱${calculatedPrice.toFixed(2)} PHP)!`
         );
       }
 
@@ -476,10 +477,22 @@ export default function MemberTrainersPage() {
                       )}
                     </div>
 
-                    <div className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{b.sessionDate} • {b.startTime} – {b.endTime}</span>
-                      <span className="text-slate-500">•</span>
+                    <div className="text-xs text-emerald-400 font-medium flex flex-wrap items-center gap-2">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{b.sessionDate}</span>
+                      </span>
+                      <span className="text-slate-600">•</span>
+                      <span className="flex items-center gap-1.5 text-amber-300 font-mono">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Time to Start: <strong className="text-white">{b.startTime}</strong></span>
+                        <span className="text-slate-600">→</span>
+                        <span>Time to Finish: <strong className="text-white">{b.endTime}</strong></span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-semibold">
+                        Takes {api.formatDurationText(b.startTime, b.endTime)} from start to finish
+                      </span>
+                      <span className="text-slate-600">•</span>
                       <span className="text-slate-300">{b.sessionType || "1-on-1 Workout Coaching"}</span>
                     </div>
 
@@ -575,9 +588,9 @@ export default function MemberTrainersPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Time From (Start)</span>
+                    <span>Time to Start</span>
                   </label>
                   <input
                     type="time"
@@ -597,9 +610,9 @@ export default function MemberTrainersPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Time Until (End)</span>
+                    <span>Time to Finish</span>
                   </label>
                   <input
                     type="time"
@@ -614,12 +627,17 @@ export default function MemberTrainersPage() {
               </div>
 
               {/* Dynamic Duration and Pricing Preview */}
-              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-slate-950/80 border border-slate-800">
-                <span className="text-slate-400 flex items-center gap-1.5">
-                  <Timer className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Duration: <strong className="text-white">{durationHours} hr{durationHours > 1 ? "s" : ""}</strong> ({startTime} to {endTime})</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs px-3.5 py-2.5 rounded-lg bg-slate-950/80 border border-slate-800">
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <Timer className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    It takes <strong className="text-white">{api.formatDurationText(startTime, endTime)}</strong> from start to finish
+                    <span className="text-slate-500 text-[11px] block sm:inline sm:ml-1">
+                      (Start: {startTime} → Finish: {endTime})
+                    </span>
+                  </span>
                 </span>
-                <span className="font-bold text-emerald-400">
+                <span className="font-bold text-emerald-400 shrink-0">
                   ₱{calculatedPrice.toFixed(2)} / {coinsCost} Coins
                 </span>
               </div>
@@ -627,7 +645,7 @@ export default function MemberTrainersPage() {
               {!isTimeValid && (
                 <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 text-[11px] text-rose-300 flex items-center gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  <span>Invalid Time Range: &ldquo;Time Until&rdquo; must be later than &ldquo;Time From&rdquo;.</span>
+                  <span>Invalid Time Range: &ldquo;Time to Finish&rdquo; must be later than &ldquo;Time to Start&rdquo;.</span>
                 </div>
               )}
 

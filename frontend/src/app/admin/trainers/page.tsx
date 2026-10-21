@@ -679,7 +679,7 @@ export default function AdminTrainersPage() {
                         Requested Session Slot
                       </span>
                       <span className="font-semibold text-white mt-0.5 block">
-                        📅 {conflict.sessionDate} • ⏰ {conflict.startTime} – {conflict.endTime}
+                        📅 {conflict.sessionDate} • Time to Start: {conflict.startTime} → Time to Finish: {conflict.endTime} ({api.formatDurationText(conflict.startTime, conflict.endTime)} from start to finish)
                       </span>
                     </div>
 

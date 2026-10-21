@@ -52,7 +52,7 @@ export class BookingService {
     }
 
     if (!data.startTime || !data.endTime || data.startTime >= data.endTime) {
-      throw new Error("Invalid session time. Start time must precede end time.");
+      throw new Error("Invalid session time: Time to Finish must be later than Time to Start.");
     }
 
     const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
@@ -204,7 +204,7 @@ export class BookingService {
           data: {
             userId: member.userId,
             title: "Loyalty Coins Redeemed for Trainer",
-            message: `Redeemed ${coinsRequired} coins for ${durationHours} hr 1-on-1 session with Coach ${trainer.user?.firstName || "Trainer"} (${data.startTime} - ${data.endTime}).`,
+            message: `Redeemed ${coinsRequired} coins for coaching session with Coach ${trainer.user?.firstName || "Trainer"} (Time to Start: ${data.startTime} • Time to Finish: ${data.endTime} — Takes ${durationHours} hr${durationHours > 1 ? "s" : ""} from start to finish).`,
             type: "reward",
           },
         });

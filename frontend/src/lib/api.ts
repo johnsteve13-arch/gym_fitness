@@ -1480,6 +1480,23 @@ class ApiClient {
     return Math.max(0.5, Math.round((diff / 60) * 10) / 10);
   }
 
+  formatDurationText(startTime: string, endTime: string): string {
+    if (!startTime || !endTime) return "1 hr";
+    const [sH, sM] = startTime.split(":").map(Number);
+    const [eH, eM] = endTime.split(":").map(Number);
+    const diffMins = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+    if (diffMins <= 0) return "1 hr";
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    if (hours > 0 && mins > 0) {
+      return `${hours} hr${hours > 1 ? "s" : ""} ${mins} min${mins > 1 ? "s" : ""}`;
+    }
+    if (hours > 0) {
+      return `${hours} hr${hours > 1 ? "s" : ""}`;
+    }
+    return `${mins} min${mins > 1 ? "s" : ""}`;
+  }
+
   calculateTrainerCoins(hourlyRate: number | string, durationHours: number = 1): number {
     const rate = Number(hourlyRate) || 75;
     const base = rate > 200 ? Math.round(rate / 5) : Math.max(50, Math.round(rate));
