@@ -158,8 +158,9 @@ export default function MemberTrainersPage() {
 
     const durationHours = api.calculateDurationHours(startTime, endTime);
     const durationText = api.formatDurationText(startTime, endTime);
-    const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate, durationHours);
-    const calculatedPrice = Math.round(Number(selectedTrainer.hourlyRate) * durationHours);
+    const trainerRate = Number(selectedTrainer.hourlyRate) === 500 ? 80 : Number(selectedTrainer.hourlyRate);
+    const coinsCost = api.calculateTrainerCoins(trainerRate, durationHours);
+    const calculatedPrice = Math.round(trainerRate * durationHours);
 
     if (paymentMethod === "coins" && coinBalance < coinsCost) {
       alert(`Insufficient coin balance. You have ${coinBalance} coins, but this ${durationHours}-hour private session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
@@ -408,7 +409,7 @@ export default function MemberTrainersPage() {
                     <div className="flex justify-between items-center text-xs text-slate-300 border-t border-slate-800 pt-3">
                       <div>
                         <span className="text-slate-400 block">Rate:</span>
-                        <strong className="text-emerald-400 font-bold">₱{Number(t.hourlyRate).toFixed(2)}/hr</strong>
+                        <strong className="text-emerald-400 font-bold">₱{Number(t.hourlyRate === 500 ? 80 : t.hourlyRate).toFixed(2)}/hr</strong>
                       </div>
                       <div className="text-right">
                         <span className="text-slate-400 block">Or Redeem:</span>
@@ -582,8 +583,9 @@ export default function MemberTrainersPage() {
       {/* BOOK TRAINER MODAL */}
       {selectedTrainer && (() => {
         const durationHours = api.calculateDurationHours(startTime, endTime);
-        const coinsCost = api.calculateTrainerCoins(selectedTrainer.hourlyRate, durationHours);
-        const calculatedPrice = Math.round(Number(selectedTrainer.hourlyRate) * durationHours);
+        const trainerRate = Number(selectedTrainer.hourlyRate) === 500 ? 80 : Number(selectedTrainer.hourlyRate);
+        const coinsCost = api.calculateTrainerCoins(trainerRate, durationHours);
+        const calculatedPrice = Math.round(trainerRate * durationHours);
         const hasSufficientCoins = coinBalance >= coinsCost;
         const isTimeValid = endTime > startTime;
 
@@ -999,7 +1001,7 @@ export default function MemberTrainersPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Cash or Card at desk (₱{Number(selectedTrainer.hourlyRate).toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
+                        Cash or Card at desk (₱{trainerRate.toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
                       </div>
                     </div>
                   </button>
@@ -1155,7 +1157,7 @@ export default function MemberTrainersPage() {
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-white truncate">{alt.name}</div>
                             <div className="text-[10px] text-emerald-400 truncate">{alt.specialization}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">₱{alt.hourlyRate}/hr</div>
+                            <div className="text-[10px] text-slate-400 font-mono">₱{alt.hourlyRate === 500 ? 80 : alt.hourlyRate}/hr</div>
                           </div>
                           <Button
                             size="sm"

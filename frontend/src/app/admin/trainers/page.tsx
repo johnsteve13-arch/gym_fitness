@@ -74,7 +74,7 @@ export default function AdminTrainersPage() {
     customSpecialization: "",
     bio: "",
     experienceYears: 3,
-    hourlyRate: 75.0,
+    hourlyRate: 80.0,
     maxClients: 20,
     avatarUrl: "",
     password: "Password@123",
@@ -348,7 +348,7 @@ export default function AdminTrainersPage() {
           form.bio.trim() ||
           `Certified ${finalSpecialization} specialist dedicated to helping members achieve their athletic goals.`,
         experienceYears: Number(form.experienceYears) || 1,
-        hourlyRate: Number(form.hourlyRate) || 75.0,
+        hourlyRate: Number(form.hourlyRate) || 80.0,
         maxClients: Number(form.maxClients) || 20,
         avatarUrl:
           form.avatarUrl.trim() ||
@@ -367,7 +367,7 @@ export default function AdminTrainersPage() {
         customSpecialization: "",
         bio: "",
         experienceYears: 3,
-        hourlyRate: 75.0,
+        hourlyRate: 80.0,
         maxClients: 20,
         avatarUrl: "",
         password: "Password@123",
@@ -436,7 +436,7 @@ export default function AdminTrainersPage() {
   const totalTrainers = trainers.length;
   const avgRate =
     totalTrainers > 0
-      ? (trainers.reduce((acc, t) => acc + (Number(t.hourlyRate) || 0), 0) / totalTrainers).toFixed(0)
+      ? (trainers.reduce((acc, t) => acc + (Number(t.hourlyRate === 500 ? 80 : t.hourlyRate) || 0), 0) / totalTrainers).toFixed(0)
       : "0";
   const uniqueSpecs = Array.from(new Set(trainers.map((t) => t.specialization))).length;
 
@@ -627,7 +627,7 @@ export default function AdminTrainersPage() {
                       {pt.user?.phone && <span>📞 {pt.user.phone}</span>}
                     </div>
                     <div className="text-[11px] text-slate-300 mt-1.5 font-mono">
-                      Rate: <strong className="text-emerald-400 font-bold">₱{Number(pt.hourlyRate).toFixed(2)}/hr</strong> • Exp: <strong>{pt.experienceYears} yrs</strong>
+                      Rate: <strong className="text-emerald-400 font-bold">₱{Number(pt.hourlyRate === 500 ? 80 : pt.hourlyRate).toFixed(2)}/hr</strong> • Exp: <strong>{pt.experienceYears} yrs</strong>
                     </div>
                   </div>
                 </div>
@@ -833,7 +833,7 @@ export default function AdminTrainersPage() {
                             </Badge>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5">
-                            {coach?.specialization} • ₱{Number(coach?.hourlyRate || 75).toFixed(2)}/hr
+                            {coach?.specialization} • ₱{Number(coach?.hourlyRate === 500 ? 80 : (coach?.hourlyRate || 80)).toFixed(2)}/hr
                           </div>
                         </div>
                       </div>
@@ -1122,7 +1122,7 @@ export default function AdminTrainersPage() {
                     <div>
                       <span className="text-slate-500 text-[10px] block">Hourly Rate</span>
                       <strong className="text-emerald-400 font-bold">
-                        ₱{Number(t.hourlyRate).toFixed(2)}
+                        ₱{Number(t.hourlyRate === 500 ? 80 : t.hourlyRate).toFixed(2)}
                       </strong>
                     </div>
                     <div className="pt-2 col-span-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
@@ -1605,7 +1605,7 @@ export default function AdminTrainersPage() {
               </div>
               <div className="text-xs text-emerald-400 font-semibold">{trainerToDecline?.specialization}</div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                {trainerToDecline?.user?.email} • ₱{Number(trainerToDecline?.hourlyRate || 75).toFixed(2)}/hr
+                {trainerToDecline?.user?.email} • ₱{Number(trainerToDecline?.hourlyRate === 500 ? 80 : (trainerToDecline?.hourlyRate || 80)).toFixed(2)}/hr
               </div>
             </div>
           </div>
@@ -1879,7 +1879,7 @@ export default function AdminTrainersPage() {
               </div>
               <div className="text-xs text-emerald-400 font-semibold">{trainerForUnavailability?.specialization}</div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                {trainerForUnavailability?.user?.email} • ₱{Number(trainerForUnavailability?.hourlyRate || 75).toFixed(2)}/hr
+                {trainerForUnavailability?.user?.email} • ₱{Number(trainerForUnavailability?.hourlyRate === 500 ? 80 : (trainerForUnavailability?.hourlyRate || 80)).toFixed(2)}/hr
               </div>
             </div>
           </div>

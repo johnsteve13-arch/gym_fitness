@@ -175,7 +175,19 @@ class ApiClient {
     if (typeof window === "undefined") return [];
     try {
       const stored = localStorage.getItem("apex_registered_trainers");
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const parsed: Trainer[] = JSON.parse(stored);
+      let modified = false;
+      parsed.forEach((t) => {
+        if (Number(t.hourlyRate) === 500 || t.hourlyRate === "500" || t.hourlyRate === 500) {
+          t.hourlyRate = 80;
+          modified = true;
+        }
+      });
+      if (modified) {
+        localStorage.setItem("apex_registered_trainers", JSON.stringify(parsed));
+      }
+      return parsed;
     } catch {
       return [];
     }
@@ -248,7 +260,19 @@ class ApiClient {
     if (typeof window === "undefined") return [];
     try {
       const stored = localStorage.getItem("apex_trainer_bookings");
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const parsed: any[] = JSON.parse(stored);
+      let modified = false;
+      parsed.forEach((b) => {
+        if (Number(b.price) === 500 || b.price === "500" || b.price === 500) {
+          b.price = 80;
+          modified = true;
+        }
+      });
+      if (modified) {
+        localStorage.setItem("apex_trainer_bookings", JSON.stringify(parsed));
+      }
+      return parsed;
     } catch {
       return [];
     }
@@ -385,7 +409,7 @@ class ApiClient {
         userId: result.user.id,
         specialization: body.specialization || "Strength & Conditioning",
         bio: body.bio || "Certified personal coach dedicated to helping athletes achieve peak results.",
-        hourlyRate: parseFloat(body.hourlyRate) || 750,
+        hourlyRate: parseFloat(body.hourlyRate) || 80,
         rating: 5.0,
         experienceYears: parseInt(body.experienceYears, 10) || 3,
         maxClients: 20,
@@ -1121,7 +1145,7 @@ class ApiClient {
         specialization: body.specialization || "Strength & Conditioning",
         bio: body.bio || "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
         experienceYears: Number(body.experienceYears) || 3,
-        hourlyRate: Number(body.hourlyRate) || 75.0,
+        hourlyRate: Number(body.hourlyRate) || 80.0,
         rating: 5.0,
         maxClients: Number(body.maxClients) || 20,
         createdAt: new Date().toISOString(),
@@ -1498,7 +1522,8 @@ class ApiClient {
   }
 
   calculateTrainerCoins(hourlyRate: number | string, durationHours: number = 1): number {
-    const rate = Number(hourlyRate) || 75;
+    const rawRate = Number(hourlyRate);
+    const rate = rawRate === 500 || !rawRate ? 80 : rawRate;
     const base = rate > 200 ? Math.round(rate / 5) : Math.max(50, Math.round(rate));
     return Math.round(base * durationHours);
   }
@@ -2082,7 +2107,7 @@ class ApiClient {
         id: t.id,
         name: `Coach ${t.user?.firstName || "Trainer"} ${t.user?.lastName || ""}`,
         specialization: t.specialization || "Strength & Conditioning",
-        hourlyRate: Number(t.hourlyRate || 75),
+        hourlyRate: Number(t.hourlyRate === 500 ? 80 : (t.hourlyRate || 80)),
         rating: Number(t.rating || 4.9),
         avatarUrl: t.user?.avatarUrl,
       }));

@@ -120,8 +120,9 @@ export default function MemberOverviewPage() {
 
     const durationHours = api.calculateDurationHours(startTime, endTime);
     const durationText = api.formatDurationText(startTime, endTime);
-    const coinsCost = api.calculateTrainerCoins(coach.hourlyRate, durationHours);
-    const calculatedPrice = Math.round(Number(coach.hourlyRate) * durationHours);
+    const coachRate = Number(coach.hourlyRate) === 500 ? 80 : Number(coach.hourlyRate);
+    const coinsCost = api.calculateTrainerCoins(coachRate, durationHours);
+    const calculatedPrice = Math.round(coachRate * durationHours);
 
     if (paymentMethod === "coins" && coinBalance < coinsCost) {
       alert(`Insufficient coin balance. You have ${coinBalance} coins, but this ${durationHours}-hour session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
@@ -527,7 +528,7 @@ export default function MemberOverviewPage() {
               >
                 {trainers.map((t) => (
                   <option key={t.id} value={t.id}>
-                    Coach {t.user?.firstName} {t.user?.lastName} — {t.specialization} (₱{Number(t.hourlyRate).toFixed(2)}/hr)
+                    Coach {t.user?.firstName} {t.user?.lastName} — {t.specialization} (₱{Number(t.hourlyRate === 500 ? 80 : t.hourlyRate).toFixed(2)}/hr)
                   </option>
                 ))}
               </select>
@@ -647,8 +648,9 @@ export default function MemberOverviewPage() {
             const isTimeValid = endTime > startTime;
             const durationHours = api.calculateDurationHours(startTime, endTime);
             const durationText = api.formatDurationText(startTime, endTime);
-            const calculatedPrice = chosenCoach ? Math.round(Number(chosenCoach.hourlyRate) * durationHours) : 75;
-            const coachCoins = chosenCoach ? api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours) : 50;
+            const coachRate = chosenCoach ? (Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate)) : 80;
+            const calculatedPrice = Math.round(coachRate * durationHours);
+            const coachCoins = chosenCoach ? api.calculateTrainerCoins(coachRate, durationHours) : 50;
 
             return (
               <>
@@ -872,8 +874,9 @@ export default function MemberOverviewPage() {
           {chosenCoach && (() => {
             const isTimeValid = endTime > startTime;
             const durationHours = api.calculateDurationHours(startTime, endTime);
-            const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours);
-            const calculatedPrice = Math.round(Number(chosenCoach.hourlyRate) * durationHours);
+            const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
+            const coachCoins = api.calculateTrainerCoins(coachRate, durationHours);
+            const calculatedPrice = Math.round(coachRate * durationHours);
             const hasSufficient = coinBalance >= coachCoins;
 
             return (
@@ -939,7 +942,7 @@ export default function MemberOverviewPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Cash or Card (₱{Number(chosenCoach.hourlyRate).toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
+                        Cash or Card (₱{coachRate.toFixed(2)}/hr × {durationHours} hr{durationHours > 1 ? "s" : ""})
                       </div>
                     </div>
                   </button>
@@ -982,8 +985,9 @@ export default function MemberOverviewPage() {
             {chosenCoach && (() => {
               const isTimeValid = endTime > startTime;
               const durationHours = api.calculateDurationHours(startTime, endTime);
-              const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate, durationHours);
-              const calculatedPrice = Math.round(Number(chosenCoach.hourlyRate) * durationHours);
+              const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
+              const coachCoins = api.calculateTrainerCoins(coachRate, durationHours);
+              const calculatedPrice = Math.round(coachRate * durationHours);
               const hasSufficient = coinBalance >= coachCoins;
 
               return (

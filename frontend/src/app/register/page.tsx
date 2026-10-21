@@ -38,7 +38,7 @@ function RegisterForm() {
     planId: initialPlanId || "",
     specialization: "Strength & Conditioning",
     experienceYears: "4",
-    hourlyRate: "750",
+    hourlyRate: "80",
     bio: "Certified athletic coach specializing in barbell mechanics, functional movement, and hypertrophy programming.",
   });
   const [error, setError] = useState("");
@@ -83,7 +83,7 @@ function RegisterForm() {
       } else {
         payload.specialization = formData.specialization;
         payload.experienceYears = parseInt(formData.experienceYears, 10) || 3;
-        payload.hourlyRate = parseFloat(formData.hourlyRate) || 750;
+        payload.hourlyRate = parseFloat(formData.hourlyRate) || 80;
         payload.bio = formData.bio;
       }
 
@@ -321,11 +321,11 @@ function RegisterForm() {
                   <label className="block text-xs font-medium text-slate-300 mb-1">Hourly Coaching Rate (₱ PHP) *</label>
                   <input
                     type="number"
-                    min="100"
-                    step="50"
+                    min="20"
+                    step="10"
                     value={formData.hourlyRate}
                     onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                    placeholder="750"
+                    placeholder="80"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                     required
                   />

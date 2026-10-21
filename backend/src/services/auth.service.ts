@@ -110,7 +110,7 @@ export class AuthService {
           specialization: data.specialization || "Strength & Conditioning",
           bio: data.bio || "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
           experienceYears: Number(data.experienceYears) || 3,
-          hourlyRate: Number(data.hourlyRate) || 750.0,
+          hourlyRate: Number(data.hourlyRate) || 80.0,
         },
       });
 

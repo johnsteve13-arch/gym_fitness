@@ -528,7 +528,7 @@ export class BookingService {
           data.bio ||
           "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
         experienceYears: Number(data.experienceYears) || 3,
-        hourlyRate: Number(data.hourlyRate) || 75.0,
+        hourlyRate: Number(data.hourlyRate) || 80.0,
         maxClients: Number(data.maxClients) || 20,
         rating: 5.0,
       },

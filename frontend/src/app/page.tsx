@@ -324,7 +324,7 @@ export default function LandingPage() {
                     <p className="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">{t.bio}</p>
                     <div className="flex items-center justify-between border-t border-slate-800 pt-4 text-xs">
                       <span className="text-slate-400">Experience: <strong className="text-white">{t.experienceYears} Years</strong></span>
-                      <span className="text-white font-bold">₱{Number(t.hourlyRate).toFixed(0)}/hr</span>
+                      <span className="text-white font-bold">₱{Number(t.hourlyRate === 500 ? 80 : t.hourlyRate).toFixed(0)}/hr</span>
                     </div>
                   </div>
                 </Card>

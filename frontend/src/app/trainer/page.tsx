@@ -90,6 +90,10 @@ export default function TrainerDashboardPage() {
         t.user?.email?.toLowerCase() === user?.email?.toLowerCase()
     );
     if (found) {
+      if (Number(found.hourlyRate) === 500 || !found.hourlyRate) {
+        found.hourlyRate = 80;
+        api.saveStoredTrainer(found);
+      }
       setTrainerProfile(found);
       // Synchronize status if stored trainer has updated status
       if (found.user?.status && found.user.status !== user.status) {
@@ -575,7 +579,9 @@ export default function TrainerDashboardPage() {
 
   if (isPending) {
     const appSpecialization = trainerProfile?.specialization || "Strength & Conditioning";
-    const appRate = trainerProfile?.hourlyRate ? `₱${Number(trainerProfile.hourlyRate).toFixed(2)}` : "₱750.00";
+    const rawAppRate = Number(trainerProfile?.hourlyRate);
+    const effectiveAppRate = rawAppRate === 500 || !rawAppRate ? 80 : rawAppRate;
+    const appRate = `₱${effectiveAppRate.toFixed(2)}`;
     const appExp = trainerProfile?.experienceYears || 3;
     const appBio = trainerProfile?.bio || "Certified coach awaiting profile authorization.";
 
@@ -730,7 +736,7 @@ export default function TrainerDashboardPage() {
 
                     <div>
                       <span className="text-slate-500 text-[11px] block">Session Hourly Rate:</span>
-                      <strong className="text-white font-semibold">{appRate} / hr</strong>
+                      <strong className="text-white font-semibold">{appRate}</strong>
                     </div>
 
                     <div>
@@ -950,7 +956,9 @@ export default function TrainerDashboardPage() {
     ? `Coach ${currentUser.firstName} ${currentUser.lastName || ""}`
     : "Certified Coach";
   const specialization = trainerProfile?.specialization || "Athletic Conditioning & Performance";
-  const hourlyRate = trainerProfile?.hourlyRate ? `₱${Number(trainerProfile.hourlyRate).toFixed(2)}` : "₱75.00";
+  const rawRate = Number(trainerProfile?.hourlyRate);
+  const effectiveRate = rawRate === 500 || !rawRate ? 80 : rawRate;
+  const hourlyRate = `₱${effectiveRate.toFixed(2)}`;
 
   const uniqueAthletes = Array.from(
     new Set(
@@ -1325,7 +1333,9 @@ export default function TrainerDashboardPage() {
                 const startTimeFormatted = s.startTime || "10:00";
                 const endTimeFormatted = s.endTime || "11:00";
                 const durationText = api.formatDurationText(startTimeFormatted, endTimeFormatted);
-                const priceDisplay = s.price ? `₱${Number(s.price).toFixed(2)}` : hourlyRate;
+                const sessionRawPrice = Number(s.price);
+                const sessionEffectivePrice = sessionRawPrice === 500 ? 80 : sessionRawPrice;
+                const priceDisplay = s.price ? `₱${sessionEffectivePrice.toFixed(2)}` : hourlyRate;
 
                 return (
                   <div
@@ -1366,7 +1376,7 @@ export default function TrainerDashboardPage() {
                           {s.paymentMethod === "coins" || s.coinsPaid ? (
                             <Badge variant="warning" className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/40 flex items-center gap-1 font-bold">
                               <Award className="w-3 h-3" />
-                              <span>Redeemed via Coins ({s.coinsPaid || api.calculateTrainerCoins(s.price || 75)} Coins)</span>
+                              <span>Redeemed via Coins ({s.coinsPaid || api.calculateTrainerCoins(sessionEffectivePrice || 80)} Coins)</span>
                             </Badge>
                           ) : (
                             <Badge variant="neutral" className="text-[10px]">
@@ -1395,7 +1405,7 @@ export default function TrainerDashboardPage() {
                               <span className="text-emerald-400 font-bold">100% Refunded / Protected</span>
                             ) : s.paymentMethod === "coins" || s.coinsPaid ? (
                               <span className="text-amber-400 font-bold">
-                                🪙 {s.coinsPaid || api.calculateTrainerCoins(s.price || 75)} Coins (Redeemed)
+                                🪙 {s.coinsPaid || api.calculateTrainerCoins(sessionEffectivePrice || 80)} Coins (Redeemed)
                               </span>
                             ) : (
                               <span className="text-white font-bold">{priceDisplay}</span>

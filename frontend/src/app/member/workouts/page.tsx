@@ -118,7 +118,8 @@ export default function MemberWorkoutsPage() {
       return;
     }
 
-    const coinsCost = api.calculateTrainerCoins(chosenCoach.hourlyRate);
+    const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
+    const coinsCost = api.calculateTrainerCoins(coachRate);
     if (paymentMethod === "coins" && coinBalance < coinsCost) {
       alert(`Insufficient coin balance. You have ${coinBalance} coins, but this session requires ${coinsCost} coins. Please switch to Direct Payment or earn more coins.`);
       return;
@@ -152,7 +153,7 @@ export default function MemberWorkoutsPage() {
         endTime,
         sessionType: trainerWorkoutFocus || "1-on-1 Workout Coaching",
         notes: trainerNotes || `Coaching for workout: ${trainerWorkoutFocus}`,
-        price: chosenCoach.hourlyRate,
+        price: coachRate,
         paymentMethod,
         coinsPaid: paymentMethod === "coins" ? coinsCost : undefined,
       });
@@ -394,7 +395,7 @@ export default function MemberWorkoutsPage() {
               >
                 {trainers.map((t) => (
                   <option key={t.id} value={t.id}>
-                    Coach {t.user?.firstName} {t.user?.lastName} — {t.specialization} (₱{Number(t.hourlyRate).toFixed(2)}/hr)
+                    Coach {t.user?.firstName} {t.user?.lastName} — {t.specialization} (₱{Number(t.hourlyRate === 500 ? 80 : t.hourlyRate).toFixed(2)}/hr)
                   </option>
                 ))}
               </select>
@@ -453,7 +454,8 @@ export default function MemberWorkoutsPage() {
           </div>
 
           {chosenCoach && (() => {
-            const coachCoins = api.calculateTrainerCoins(chosenCoach.hourlyRate);
+            const coachRate = Number(chosenCoach.hourlyRate) === 500 ? 80 : Number(chosenCoach.hourlyRate);
+            const coachCoins = api.calculateTrainerCoins(coachRate);
             const hasSufficient = coinBalance >= coachCoins;
 
             return (
@@ -515,7 +517,7 @@ export default function MemberWorkoutsPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white">Direct Payment</span>
                         <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
-                          ₱{Number(chosenCoach.hourlyRate).toFixed(2)}
+                          ₱{coachRate.toFixed(2)}
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
@@ -565,13 +567,13 @@ export default function MemberWorkoutsPage() {
               isLoading={bookingTrainer}
               disabled={
                 trainers.length === 0 ||
-                (paymentMethod === "coins" && chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate))
+                (paymentMethod === "coins" && chosenCoach && coinBalance < api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate))
               }
               className={paymentMethod === "coins" ? "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold" : "neon-glow font-bold"}
             >
               {paymentMethod === "coins"
-                ? (chosenCoach && coinBalance < api.calculateTrainerCoins(chosenCoach.hourlyRate)
-                    ? `Insufficient Coins (${coinBalance}/${api.calculateTrainerCoins(chosenCoach.hourlyRate)})`
+                ? (chosenCoach && coinBalance < api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate)
+                    ? `Insufficient Coins (${coinBalance}/${api.calculateTrainerCoins(Number(chosenCoach.hourlyRate) === 500 ? 80 : chosenCoach.hourlyRate)})`
                     : `Redeem Coins & Book Coach`)
                 : "Confirm Coach for Workout"}
             </Button>
