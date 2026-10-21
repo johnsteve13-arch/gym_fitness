@@ -49,6 +49,16 @@ export default function TrainerDashboardPage() {
   const [filterTab, setFilterTab] = useState<"all" | "confirmed" | "completed" | "declined">("all");
   const [unavailabilities, setUnavailabilities] = useState<TrainerUnavailability[]>([]);
 
+  // Trainer Profile Unavailability (Sick Leave / Off-Duty) State
+  const [isUnavailModalOpen, setIsUnavailModalOpen] = useState(false);
+  const [unavailDate, setUnavailDate] = useState(new Date().toISOString().slice(0, 10));
+  const [unavailIsFullDay, setUnavailIsFullDay] = useState(true);
+  const [unavailStartTime, setUnavailStartTime] = useState("08:00");
+  const [unavailEndTime, setUnavailEndTime] = useState("18:00");
+  const [unavailCategory, setUnavailCategory] = useState("sick_leave");
+  const [unavailDescription, setUnavailDescription] = useState("Feeling unwell with a fever / flu, resting today to recover.");
+  const [submittingUnavail, setSubmittingUnavail] = useState(false);
+
   // Decline Booking Modal State
   const [bookingToDecline, setBookingToDecline] = useState<any | null>(null);
   const [declineReasonPreset, setDeclineReasonPreset] = useState<string>("schedule_conflict");
@@ -876,6 +886,66 @@ export default function TrainerDashboardPage() {
     }
   };
 
+  const handleSubmitUnavailability = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!unavailDescription.trim()) {
+      alert("Please provide an explanation for your unavailability (e.g. sick with flu/fever, medical clinic appointment, etc.).");
+      return;
+    }
+
+    if (!unavailIsFullDay && unavailEndTime <= unavailStartTime) {
+      alert("End Time must be later than Start Time.");
+      return;
+    }
+
+    setSubmittingUnavail(true);
+    try {
+      const trainerId = trainerProfile?.id || currentUser?.id || "trainer-me";
+      const trainerName = displayName;
+
+      await api.setTrainerUnavailability({
+        trainerId,
+        trainerName,
+        date: unavailDate,
+        isFullDay: unavailIsFullDay,
+        startTime: unavailIsFullDay ? undefined : unavailStartTime,
+        endTime: unavailIsFullDay ? undefined : unavailEndTime,
+        reasonCategory: unavailCategory,
+        description: unavailDescription.trim(),
+        setBy: "trainer",
+      });
+
+      const updated = await api.getTrainerUnavailabilities(trainerId);
+      setUnavailabilities(updated);
+
+      setActionSuccess(
+        `Availability updated! Your profile is marked 'Not Available' on ${unavailDate} (${unavailCategory.replace(/_/g, " ")}). Athletes booking during this window will see your reason and payment is 100% protected.`
+      );
+      setIsUnavailModalOpen(false);
+      setTimeout(() => setActionSuccess(""), 6000);
+    } catch (err: any) {
+      alert(err.message || "Failed to submit unavailability.");
+    } finally {
+      setSubmittingUnavail(false);
+    }
+  };
+
+  const handleRemoveUnavailability = async (unavailId: string, date: string) => {
+    if (!confirm(`Are you ready to restore your availability for ${date}? You will immediately be available for athlete bookings.`)) {
+      return;
+    }
+    try {
+      await api.removeTrainerUnavailability(unavailId);
+      const trainerId = trainerProfile?.id || currentUser?.id || "trainer-me";
+      const updated = await api.getTrainerUnavailabilities(trainerId);
+      setUnavailabilities(updated);
+      setActionSuccess(`Schedule restored! You are now marked Available on ${date}.`);
+      setTimeout(() => setActionSuccess(""), 5000);
+    } catch (err: any) {
+      alert(err.message || "Failed to remove unavailability.");
+    }
+  };
+
   const displayName = currentUser?.firstName
     ? `Coach ${currentUser.firstName} ${currentUser.lastName || ""}`
     : "Certified Coach";
@@ -917,11 +987,31 @@ export default function TrainerDashboardPage() {
                 <span>{displayName}</span>
                 <Badge variant="emerald">Personal Trainer</Badge>
               </h1>
-              <p className="text-xs text-slate-400">Specialization: {specialization} • Active Status</p>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <p className="text-xs text-slate-400">Specialization: {specialization} • Active Status</p>
+                {unavailabilities.some((u) => u.date === new Date().toISOString().slice(0, 10)) && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold animate-pulse">
+                    <AlertTriangle className="w-3 h-3 text-rose-400" />
+                    <span>Not Available Today</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setUnavailCategory("sick_leave");
+                setUnavailDescription("Feeling unwell with a fever / flu, resting today to recover.");
+                setIsUnavailModalOpen(true);
+              }}
+              leftIcon={<AlertTriangle className="w-3.5 h-3.5 text-amber-950" />}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold shadow-md shadow-amber-400/20 text-xs"
+            >
+              Report Sick / Not Available
+            </Button>
             <Link href="/kiosk">
               <Button size="sm" variant="secondary">
                 Open Reception Kiosk
@@ -985,53 +1075,124 @@ export default function TrainerDashboardPage() {
           </div>
         </div>
 
-        {/* Active Unavailability Overrides Set by Admin */}
-        {unavailabilities.length > 0 && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-950/40 border border-amber-600/50 space-y-3 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        {/* Coach Availability & Sick Leave Hub */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <Calendar className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-sm font-bold text-white">
-                  Active Admin Schedule Overrides ({unavailabilities.length})
+                  Coach Availability & Sick Leave Status
                 </h3>
+                {unavailabilities.length > 0 ? (
+                  <Badge variant="warning" className="text-[10px] py-0 px-2 font-mono">
+                    {unavailabilities.length} Unavailable {unavailabilities.length === 1 ? "Notice" : "Notices"}
+                  </Badge>
+                ) : (
+                  <Badge variant="emerald" className="text-[10px] py-0 px-2 font-mono">
+                    100% Open & Available
+                  </Badge>
+                )}
               </div>
-              <Badge variant="warning" className="text-xs py-0.5 px-2">
-                Member Bookings Restricted
-              </Badge>
+              <p className="text-xs text-slate-400 mt-1">
+                Manage your real-time booking status. If you are sick, injured, or off-duty, report your unavailability here to automatically inform athletes and lock slots.
+              </p>
             </div>
-            <p className="text-xs text-amber-200/90 leading-relaxed">
-              The gym administrator has placed official unavailability notices on your calendar. During these scheduled windows, member bookings are locked in real-time and the admin&apos;s reason description below is displayed to athletes.
-            </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              {unavailabilities.map((u) => (
-                <div key={u.id} className="p-3.5 rounded-xl bg-slate-950/80 border border-amber-600/30 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{u.date}</span>
-                    </div>
-                    <span className="text-[10px] font-mono bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
-                      {u.isFullDay ? "Full Day" : `${u.startTime} - ${u.endTime}`}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
-                      Admin Description / Reason:
-                    </span>
-                    <p className="text-amber-200 italic font-medium mt-0.5">
-                      &ldquo;{u.description}&rdquo;
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-900 pt-1.5">
-                    <span>Category: <strong className="text-slate-300 capitalize">{u.reasonCategory.replace(/_/g, " ")}</strong></span>
-                    <span className="text-emerald-400 font-semibold">100% Payment Protected</span>
+            <Button
+              size="sm"
+              onClick={() => {
+                setUnavailCategory("sick_leave");
+                setUnavailDescription("Feeling unwell with a fever / flu, resting today to recover.");
+                setIsUnavailModalOpen(true);
+              }}
+              leftIcon={<AlertTriangle className="w-3.5 h-3.5 text-amber-950" />}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold shrink-0 shadow-md shadow-amber-400/20 text-xs"
+            >
+              Report Sick / Not Available
+            </Button>
+          </div>
+
+          {unavailabilities.length === 0 ? (
+            <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Your Calendar is Open for Member Bookings</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Athletes can schedule private sessions with you during standard hours (08:00 – 18:00).
                   </div>
                 </div>
-              ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnavailCategory("sick_leave");
+                  setUnavailDescription("Feeling unwell with a fever / flu, resting today to recover.");
+                  setIsUnavailModalOpen(true);
+                }}
+                className="text-xs text-amber-400 hover:text-amber-300 font-semibold hover:underline text-left sm:text-right shrink-0"
+              >
+                Calling in sick today? Click to set &rarr;
+              </button>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span>Active Unavailability & Sick Leave Records:</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {unavailabilities.map((u) => {
+                  const isTrainerReported = u.setBy === "trainer";
+
+                  return (
+                    <div key={u.id} className="p-4 rounded-xl bg-slate-950 border border-amber-600/40 text-xs space-y-2.5 shadow-md">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{u.date}</span>
+                          <span className="text-[10px] font-mono bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                            {u.isFullDay ? "Full Day" : `${u.startTime} - ${u.endTime}`}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 capitalize">
+                          {u.reasonCategory.replace(/_/g, " ")}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold mb-0.5">
+                          {isTrainerReported ? "Your Reason Description:" : "Admin Override Reason:"}
+                        </span>
+                        <p className="text-amber-200 italic font-medium">
+                          &ldquo;{u.description}&rdquo;
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-900">
+                        <span className="text-slate-400 text-[10px]">
+                          Origin: <strong className="text-slate-300">{isTrainerReported ? "Reported by You" : "Gym Administration"}</strong>
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUnavailability(u.id, u.date)}
+                          className="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 font-semibold transition text-[11px] flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Mark Available Again</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Quick Trainer Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1055,7 +1216,7 @@ export default function TrainerDashboardPage() {
 
           <Card className="glass-card border-slate-800">
             <span className="text-xs font-semibold text-slate-400 uppercase">Coaching Rate</span>
-            <div className="mt-2 text-3xl font-black text-emerald-400">{hourlyRate} / hr</div>
+            <div className="mt-2 text-3xl font-black text-emerald-400">{hourlyRate}</div>
             <div className="text-xs text-slate-400 mt-1">Direct session billing</div>
           </Card>
 
@@ -1513,6 +1674,206 @@ export default function TrainerDashboardPage() {
                 </Button>
               </div>
             </div>
+          </Modal>
+        )}
+
+        {/* REPORT NOT AVAILABLE / SICK LEAVE MODAL */}
+        {isUnavailModalOpen && (
+          <Modal
+            isOpen={true}
+            onClose={() => setIsUnavailModalOpen(false)}
+            title="Report Not Available / Sick Leave (Trainer Profile)"
+            maxWidth="md"
+          >
+            <form onSubmit={handleSubmitUnavailability} className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-start gap-2.5 shadow-sm">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong className="text-white block font-bold mb-0.5">Mark Your Profile as Not Available:</strong>
+                  Use this to notify athletes and gym management if you are unwell or sick (e.g., fever, flu), have a medical emergency, or need off-duty time. Matching booking slots will be locked immediately in real-time, and athletes will see your reason description.
+                </div>
+              </div>
+
+              {/* Date & Mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Unavailability Date</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={unavailDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setUnavailDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-400 font-mono"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Window Duration</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setUnavailIsFullDay(true)}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold border transition ${
+                        unavailIsFullDay
+                          ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Full Day
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUnavailIsFullDay(false)}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold border transition ${
+                        !unavailIsFullDay
+                          ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Specific Hours
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Time Range if not full day */}
+              {!unavailIsFullDay && (
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800 animate-in fade-in">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">From (Start Time)</label>
+                    <input
+                      type="time"
+                      value={unavailStartTime}
+                      onChange={(e) => setUnavailStartTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-amber-400"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Until (End Time)</label>
+                    <input
+                      type="time"
+                      value={unavailEndTime}
+                      onChange={(e) => setUnavailEndTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-amber-400"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Reason Category */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1">
+                  Reason Category
+                </label>
+                <select
+                  value={unavailCategory}
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    setUnavailCategory(cat);
+                    if (cat === "sick_leave") {
+                      setUnavailDescription("Feeling unwell / sick with flu and fever, taking medical rest today.");
+                    } else if (cat === "injury") {
+                      setUnavailDescription("Resting physical muscle strain under medical recommendation.");
+                    } else if (cat === "medical") {
+                      setUnavailDescription("Attending a doctor's clinic appointment.");
+                    } else if (cat === "emergency") {
+                      setUnavailDescription("Attending to an urgent family personal emergency.");
+                    } else if (cat === "off_duty") {
+                      setUnavailDescription("Off-duty / personal rest day.");
+                    }
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-400"
+                >
+                  <option value="sick_leave">Sick Leave / Illness (e.g., Fever, Flu, Sick)</option>
+                  <option value="injury">Injury / Physical Strain / Physical Rehab</option>
+                  <option value="medical">Doctor / Medical Clinic Appointment</option>
+                  <option value="emergency">Personal / Family Emergency</option>
+                  <option value="off_duty">Off-Duty / Scheduled Rest Day</option>
+                  <option value="training">Masterclass / Seminar / Offsite Coaching</option>
+                  <option value="custom">Other Reason</option>
+                </select>
+              </div>
+
+              {/* Description Input & Quick Presets */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-200">
+                    Description & Explanation for Athletes & Admin
+                  </label>
+                  <span className="text-[10px] text-amber-400">Shown directly to athletes</span>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  <span className="text-[10px] text-slate-400 font-medium">Quick Presets:</span>
+                  {[
+                    { label: "Sick with Flu/Fever", text: "Feeling unwell with high fever and flu, taking medical rest today to recover." },
+                    { label: "Doctor Appointment", text: "Attending a medical clinic doctor's appointment." },
+                    { label: "Muscle Strain", text: "Resting acute muscle strain under physiotherapy guidance." },
+                    { label: "Family Emergency", text: "Attending to an urgent personal family emergency today." },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setUnavailDescription(preset.text)}
+                      className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] text-slate-300 hover:text-white transition"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={unavailDescription}
+                  onChange={(e) => setUnavailDescription(e.target.value)}
+                  placeholder="e.g. I have a sick / feeling unwell with flu and fever, taking rest today."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-400"
+                  required
+                />
+              </div>
+
+              {/* Live Preview */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Athlete View Preview:
+                </span>
+                <div className="text-amber-300 text-xs italic font-medium">
+                  &ldquo;🚫 Unavailable: {unavailDescription || "Coach is unavailable"}&rdquo;
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  Window: {unavailDate} ({unavailIsFullDay ? "Full Day" : `${unavailStartTime} - ${unavailEndTime}`})
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsUnavailModalOpen(false)}
+                  disabled={submittingUnavail}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  isLoading={submittingUnavail}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold shadow-md shadow-amber-400/20"
+                >
+                  Save & Mark Profile Not Available
+                </Button>
+              </div>
+            </form>
           </Modal>
         )}
 

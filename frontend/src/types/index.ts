@@ -61,12 +61,13 @@ export interface TrainerUnavailability {
   trainerName: string;
   date: string; // YYYY-MM-DD
   isFullDay: boolean;
-  startTime?: string;
-  endTime?: string;
+  startTime?: string | null;
+  endTime?: string | null;
   reasonCategory: string; // "Seminar", "Sick Leave", "Floor Duty", "Vacation", "Personal"
-  description: string; // Admin's custom input description
+  description: string; // Custom input description
   createdAt: string;
   createdBy?: string;
+  setBy?: "trainer" | "admin";
 }
 
 export interface MembershipPlan {
