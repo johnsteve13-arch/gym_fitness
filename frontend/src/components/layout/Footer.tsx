@@ -19,7 +19,7 @@ export const Footer: React.FC = () => {
           </p>
           <div className="flex items-center gap-2 text-xs text-emerald-400">
             <Shield className="w-4 h-4" />
-            <span>TiDB Relational Enterprise Grade</span>
+            <span>Supabase Relational Enterprise Grade</span>
           </div>
         </div>
 

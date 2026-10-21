@@ -19,7 +19,7 @@ if (process.env.NODE_ENV !== "production") {
 export async function connectDatabase() {
   try {
     await prisma.$connect();
-    logger.info("Database connected successfully (TiDB / MySQL).");
+    logger.info("Database connected successfully (Supabase / PostgreSQL).");
     return true;
   } catch (error: any) {
     logger.warn(`Database connection failed: ${error.message}. Operating in fallback/in-memory mode for development.`);

@@ -60,7 +60,7 @@ export default function AdminDashboardPage() {
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             <span>Executive Operations Control</span>
-            <Badge variant="emerald">Live TiDB Cloud</Badge>
+            <Badge variant="emerald">Live Supabase Cloud</Badge>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Real-time business intelligence, access tracking, and retention diagnostics

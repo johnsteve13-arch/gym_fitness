@@ -1,13 +1,14 @@
 // Prisma Schema for World-Class Fitness Gym Platform
-// Compatible with TiDB Cloud, MySQL 8+, and modern relational engines
+// Connected to Supabase PostgreSQL Database with Connection Pooling
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
