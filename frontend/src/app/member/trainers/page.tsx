@@ -692,7 +692,7 @@ export default function MemberTrainersPage() {
               )}
 
               {/* REAL-TIME AVAILABILITY & INTERACTIVE SLOT SELECTOR */}
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-white">
                     <Clock className="w-3.5 h-3.5 text-emerald-400" />
@@ -712,10 +712,45 @@ export default function MemberTrainersPage() {
                 </div>
 
                 <p className="text-[11px] text-slate-400">
-                  Select an open time slot below. Booked slots are locked in real-time to prevent double booking.
+                  Select an open time slot below. Each slot shows the exact Start Time and End Time. Booked slots are locked in real-time to prevent double booking.
                 </p>
 
-                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {/* END TIME & REAL-TIME AVAILABILITY WINDOW BAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                      <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Availability Time Window</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-400 text-[11px]">Start Time:</span>
+                      <strong className="text-white font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{startTime}</strong>
+                      <span className="text-slate-500 font-bold">→</span>
+                      <span className="text-slate-400 text-[11px]">End Time:</span>
+                      <strong className="text-amber-300 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">{endTime}</strong>
+                      <span className="text-[10px] text-emerald-400 font-semibold">
+                        ({api.formatDurationText(startTime, endTime)})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-slate-300 whitespace-nowrap flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>End Time:</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-mono focus:border-amber-400 transition"
+                      title="Adjust End Time for availability slot"
+                    />
+                  </div>
+                </div>
+
+                {/* GRID OF SLOTS WITH EXPLICIT START TIME AND END TIME */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   {(availabilityData?.slots || [
                     { startTime: "08:00", endTime: "09:00", isAvailable: true, status: "available" },
                     { startTime: "09:00", endTime: "10:00", isAvailable: true, status: "available" },
@@ -739,24 +774,49 @@ export default function MemberTrainersPage() {
                           setStartTime(slot.startTime);
                           setEndTime(slot.endTime);
                         }}
-                        className={`px-2 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center justify-between transition ${
+                        className={`p-2.5 rounded-xl text-left transition border flex flex-col justify-between gap-2 ${
                           isBooked
-                            ? "bg-slate-950/80 border border-rose-950 text-slate-500 cursor-not-allowed line-through opacity-75"
+                            ? "bg-slate-950/80 border-rose-950 text-slate-500 cursor-not-allowed opacity-60"
                             : isSelected
-                            ? "bg-emerald-500/20 border border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/40"
-                            : "bg-slate-950 border border-slate-800 text-slate-300 hover:border-slate-700"
+                            ? "bg-emerald-500/15 border-emerald-500 text-white ring-1 ring-emerald-500/40 shadow-sm"
+                            : "bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700"
                         }`}
                       >
-                        <span>{slot.startTime} - {slot.endTime}</span>
-                        {isBooked ? (
-                          <span className="text-[9px] text-rose-400 font-sans flex items-center gap-0.5">
-                            <Lock className="w-2.5 h-2.5" /> Booked
+                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">
+                            {slot.startTime < "12:00" ? "Morning" : slot.startTime < "17:00" ? "Afternoon" : "Evening"}
                           </span>
-                        ) : isSelected ? (
-                          <span className="text-[9px] text-emerald-400 font-sans">✓ Picked</span>
-                        ) : (
-                          <span className="text-[9px] text-emerald-500/80 font-sans">Open</span>
-                        )}
+                          {isBooked ? (
+                            <span className="text-[9px] text-rose-400 font-sans font-bold flex items-center gap-0.5">
+                              <Lock className="w-2.5 h-2.5" /> Booked
+                            </span>
+                          ) : isSelected ? (
+                            <span className="text-[9px] text-emerald-300 font-sans font-black bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                              ✓ Picked
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-emerald-400/90 font-sans font-bold">
+                              Open
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between font-mono text-xs font-bold">
+                          <div className="flex flex-col text-left">
+                            <span className="text-[9px] text-slate-400 font-sans uppercase font-normal">Start Time</span>
+                            <span className="text-white">{slot.startTime}</span>
+                          </div>
+                          <span className="text-slate-600 font-normal">→</span>
+                          <div className="flex flex-col text-right">
+                            <span className="text-[9px] text-amber-400 font-sans uppercase font-normal">End Time</span>
+                            <span className="text-amber-300">{slot.endTime}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-900">
+                          <span>Duration: 1 hr</span>
+                          <span className="text-[9px] font-sans text-slate-400">Click to select</span>
+                        </div>
                       </button>
                     );
                   })}
@@ -975,6 +1035,9 @@ export default function MemberTrainersPage() {
                         type="button"
                         onClick={() => {
                           setStartTime(slot);
+                          const [h, m] = slot.split(":");
+                          const nextH = ((parseInt(h, 10) + 1) % 24).toString().padStart(2, "0");
+                          setEndTime(`${nextH}:${m}`);
                           setSelectedTrainer(declinedInfo.trainer);
                           setDeclinedModalOpen(false);
                         }}
@@ -982,7 +1045,7 @@ export default function MemberTrainersPage() {
                       >
                         <Clock className="w-3 h-3" />
                         <span>
-                          {slot} – {((parseInt(slot.split(":")[0], 10) + 1) % 24).toString().padStart(2, "0")}:{slot.split(":")[1]}
+                          Start: {slot} → End: {((parseInt(slot.split(":")[0], 10) + 1) % 24).toString().padStart(2, "0")}:{slot.split(":")[1]}
                         </span>
                       </button>
                     ))}
