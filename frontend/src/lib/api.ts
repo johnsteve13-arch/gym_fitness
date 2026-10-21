@@ -1816,7 +1816,7 @@ class ApiClient {
         paymentMethod: isCoins ? "coins" : (body.paymentMethod || "cash"),
         coinsPaid: isCoins ? coinsRequired : undefined,
         price: calculatedPrice,
-        notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs` : `Duration: ${durationHours} hrs`),
+        notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins (1-Day Trainer Payment) | Duration: ${durationHours} hrs` : `Duration: ${durationHours} hrs`),
         createdAt: new Date().toISOString(),
         member: {
           id: body.memberId,

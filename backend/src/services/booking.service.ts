@@ -269,7 +269,7 @@ export class BookingService {
             status: "confirmed",
             paymentStatus: "completed",
             price: calculatedPrice,
-            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs]` : `[Redeemed ${coinsRequired} Coins | Duration: ${durationHours} hrs]`,
+            notes: data.notes ? `${data.notes} [Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]` : `[Redeemed ${coinsRequired} Coins | 1-Day Payment to Trainer | Duration: ${durationHours} hrs]`,
             expiresAt: null,
           },
           include: {
@@ -284,8 +284,8 @@ export class BookingService {
         await tx.notification.create({
           data: {
             userId: member.userId,
-            title: "Loyalty Coins Redeemed for Trainer",
-            message: `Redeemed ${coinsRequired} coins for coaching session with Coach ${trainer.user?.firstName || "Trainer"} (Time to Start: ${data.startTime} • Time to Finish: ${data.endTime} — Takes ${durationHours} hr${durationHours > 1 ? "s" : ""} from start to finish).`,
+            title: "Loyalty Coins Redeemed for Trainer (1-Day Payment)",
+            message: `Redeemed ${coinsRequired} coins for one day's payment to Coach ${trainer.user?.firstName || "Trainer"} (Time to Start: ${data.startTime} • Time to Finish: ${data.endTime}).`,
             type: "reward",
           },
         });

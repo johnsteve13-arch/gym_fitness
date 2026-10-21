@@ -1237,7 +1237,7 @@ export default function TrainerDashboardPage() {
               {sessions.filter((s) => s.paymentMethod === "coins" || s.coinsPaid).length} Sessions
             </div>
             <div className="text-xs text-amber-400/80 mt-1">
-              Paid via member loyalty coins
+              150 coins = 1-day trainer payment
             </div>
           </Card>
         </div>
@@ -1376,7 +1376,7 @@ export default function TrainerDashboardPage() {
                           {s.paymentMethod === "coins" || s.coinsPaid ? (
                             <Badge variant="warning" className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/40 flex items-center gap-1 font-bold">
                               <Award className="w-3 h-3" />
-                              <span>Redeemed via Coins ({s.coinsPaid || 150} Coins)</span>
+                              <span>Redeemed via 150 Coins (1-Day Trainer Payment)</span>
                             </Badge>
                           ) : (
                             <Badge variant="neutral" className="text-[10px]">
@@ -1405,7 +1405,7 @@ export default function TrainerDashboardPage() {
                               <span className="text-emerald-400 font-bold">100% Refunded / Protected</span>
                             ) : s.paymentMethod === "coins" || s.coinsPaid ? (
                               <span className="text-amber-400 font-bold">
-                                🪙 {s.coinsPaid || 150} Coins (Redeemed)
+                                🪙 {s.coinsPaid || 150} Coins (1-Day Trainer Payment)
                               </span>
                             ) : (
                               <span className="text-white font-bold">{priceDisplay}</span>

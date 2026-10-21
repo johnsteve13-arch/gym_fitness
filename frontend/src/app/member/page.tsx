@@ -913,16 +913,16 @@ export default function MemberOverviewPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white">Redeem Coins</span>
+                        <span className="text-xs font-bold text-white">Redeem Coins (1-Day Payment)</span>
                         <span className="text-[10px] font-black text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
-                          {coachCoins} Coins
+                          150 Coins / 1 Day
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
                         {isCoinUsedToday ? (
                           <span className="text-amber-400 font-medium">⚠️ 1-day limit reached</span>
                         ) : hasSufficient ? (
-                          <span className="text-emerald-400 font-medium">✓ Steady 150 (1/day)</span>
+                          <span className="text-emerald-400 font-medium">✓ 150 Coins = 1-Day Coach Payment</span>
                         ) : (
                           <span className="text-rose-400 font-medium">✗ Insufficient ({coinBalance}/{coachCoins})</span>
                         )}
@@ -977,8 +977,8 @@ export default function MemberOverviewPage() {
                       <>
                         <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="font-bold text-white">Steady 150 Coins:</strong> {coinBalance} coins available. Remaining after booking:{" "}
-                          <strong className="text-emerald-300">{coinBalance - coachCoins} coins</strong> (Valid for 1 redemption per day).
+                          <strong className="font-bold text-white">1-Day Trainer Payment via Coins:</strong> 150 coins redeemed covers one day's payment to the trainer. Remaining balance:{" "}
+                          <strong className="text-emerald-300">{coinBalance - coachCoins} coins</strong> (1 redemption per day).
                         </div>
                       </>
                     ) : (
@@ -1027,7 +1027,7 @@ export default function MemberOverviewPage() {
                     ? isCoinUsedToday
                       ? "Daily Coin Limit Reached (1/day)"
                       : hasSufficient
-                      ? `Redeem ${coachCoins} Coins & Book Coach`
+                      ? `Redeem 150 Coins (1-Day Trainer Payment)`
                       : `Insufficient Coins (${coinBalance}/${coachCoins})`
                     : `Confirm Direct Payment (₱${calculatedPrice.toFixed(2)})`}
                 </Button>
