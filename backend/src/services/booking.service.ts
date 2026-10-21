@@ -847,14 +847,14 @@ export class BookingService {
 
     const fullName = `${trainer.user.firstName} ${trainer.user.lastName}`.trim();
     const email = trainer.user.email;
-    const phone = trainer.user.phone || "+63 912 345 6789";
+    const phone = trainer.user.phone || "";
 
     // Multi-channel dispatch: Gmail & Phone Number (SMS)
     const notificationsSent = await NotificationService.sendTrainerAcceptNotifications({
       userId: trainer.userId,
       name: fullName,
       email,
-      phone,
+      phone: phone || "+639170000000",
     });
 
     return {
@@ -887,13 +887,13 @@ export class BookingService {
 
     const fullName = `${trainer.user.firstName} ${trainer.user.lastName}`.trim();
     const email = trainer.user.email;
-    const phone = trainer.user.phone || "+63 912 345 6789";
+    const phone = trainer.user.phone || "";
 
     const notificationsSent = await NotificationService.sendTrainerDeclineNotifications({
       userId: trainer.userId,
       name: fullName,
       email,
-      phone,
+      phone: phone || "+639170000000",
       reason: reason || "Profile does not currently meet our requirements.",
     });
 

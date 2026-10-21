@@ -131,6 +131,8 @@ describe("Apex Iron Fitness - Production API & Business Logic Tests", () => {
       expect(templates.classConfirmed("Power Yoga", "2026-11-02", "09:00", "Studio B")).toContain("Power Yoga");
       expect(templates.classCancelled("HIIT Sprint", "2026-11-02", "18:00")).toContain("cancelled");
       expect(templates.securityAlert("Password Reset")).toContain("security action");
+      expect(templates.trainerApproved("Marcus")).toContain("APPROVED");
+      expect(templates.trainerDeclined("Marcus", "Roster full")).toContain("Roster full");
     });
 
     it("should dispatch SMS in safe dry-run mode and persist log to database", async () => {
@@ -161,6 +163,31 @@ describe("Apex Iron Fitness - Production API & Business Logic Tests", () => {
       expect(duplicateResult.success).toBe(true);
       expect(duplicateResult.message).toContain("Duplicate notification prevented");
       expect(duplicateResult.logId).toBe(result.logId);
+    });
+
+    it("should dispatch SMS to trainer mobile number upon approval and decline", async () => {
+      const trainerPhone = "09181234567";
+      const approveResult = await SmsService.sendSms({
+        toPhone: trainerPhone,
+        recipientName: "Coach Marcus",
+        event: "trainer_approved",
+        messageContent: SmsService.templates.trainerApproved("Marcus"),
+      });
+
+      expect(approveResult.success).toBe(true);
+      expect(approveResult.status).toBe("accepted");
+      expect(approveResult.recipientPhone).toBe(trainerPhone);
+
+      const declineResult = await SmsService.sendSms({
+        toPhone: trainerPhone,
+        recipientName: "Coach Marcus",
+        event: "trainer_declined",
+        messageContent: SmsService.templates.trainerDeclined("Marcus", "Coaching roster full"),
+      });
+
+      expect(declineResult.success).toBe(true);
+      expect(declineResult.status).toBe("accepted");
+      expect(declineResult.recipientPhone).toBe(trainerPhone);
     });
   });
 

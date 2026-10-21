@@ -271,10 +271,10 @@ export default function AdminTrainersPage() {
     setActionError("");
     try {
       const res = await api.approveTrainer(trainer.id);
-      const email = trainer.user?.email || res?.recipientEmail || "coach@gmail.com";
-      const phone = trainer.user?.phone || res?.recipientPhone || "+63 917 555 0192";
+      const email = res?.trainer?.user?.email || trainer.user?.email || "coach@gmail.com";
+      const phone = res?.trainer?.user?.phone || trainer.user?.phone || "+63 917 555 0192";
       setActionSuccess(
-        `Registration accepted! Multi-channel notification successfully dispatched to ${email} (Gmail) and ${phone} (SMS). Coach ${trainer.user?.firstName} ${trainer.user?.lastName} can now access their trainer dashboard.`
+        `Registration approved! Cellular SMS notification dispatched to ${phone} and confirmation email to ${email}. Coach ${trainer.user?.firstName} ${trainer.user?.lastName} can now access their coaching portal.`
       );
       setTimeout(() => setActionSuccess(""), 7000);
       await loadTrainers();
@@ -305,10 +305,10 @@ export default function AdminTrainersPage() {
 
     try {
       const res = await api.declineTrainer(trainerToDecline.id, finalReason);
-      const email = trainerToDecline.user?.email || res?.recipientEmail || "coach@gmail.com";
-      const phone = trainerToDecline.user?.phone || res?.recipientPhone || "+63 917 555 0192";
+      const email = res?.trainer?.user?.email || trainerToDecline.user?.email || "coach@gmail.com";
+      const phone = res?.trainer?.user?.phone || trainerToDecline.user?.phone || "+63 917 555 0192";
       setActionSuccess(
-        `Registration declined. Decision notice and reason successfully dispatched to ${email} (Gmail) and ${phone} (SMS) for Coach ${trainerToDecline.user?.firstName} ${trainerToDecline.user?.lastName}.`
+        `Registration declined. Decision notice and reason dispatched via SMS to ${phone} and email to ${email} for Coach ${trainerToDecline.user?.firstName} ${trainerToDecline.user?.lastName}.`
       );
       setTrainerToDecline(null);
       setCustomDeclineReason("");

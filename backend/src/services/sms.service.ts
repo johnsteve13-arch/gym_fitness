@@ -20,6 +20,8 @@ export interface SmsSendParams {
     | "class_confirmed"
     | "class_cancelled"
     | "security_alert"
+    | "trainer_approved"
+    | "trainer_declined"
     | "custom_admin";
   messageContent: string;
   idempotencyKey?: string;
@@ -410,6 +412,14 @@ export class SmsService {
 
     securityAlert: (details: string) =>
       `Apex Iron Security: New security action detected on your account (${details}). If this wasn't you, reset your password immediately.`,
+
+    trainerApproved: (trainerName: string) =>
+      `Apex Iron: Congratulations Coach ${trainerName}! Your trainer registration has been officially APPROVED by gym administration. You may now access your trainer dashboard.`,
+
+    trainerDeclined: (trainerName: string, reason?: string) =>
+      `Apex Iron: Notice regarding your coach registration. Your application was declined by gym administration${
+        reason ? ` (Reason: ${reason})` : ""
+      }. Please contact the front desk for inquiries.`,
   };
 
   /**

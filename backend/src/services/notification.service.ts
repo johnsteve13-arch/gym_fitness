@@ -131,7 +131,7 @@ export class NotificationService {
         toPhone: phone,
         recipientName: name,
         message: smsText,
-        metadata: { action: "trainer_approved", userId },
+        metadata: { action: "trainer_approved", event: "trainer_approved", userId },
       }),
     ]);
 
@@ -191,7 +191,7 @@ export class NotificationService {
         toPhone: phone,
         recipientName: name,
         message: smsText,
-        metadata: { action: "trainer_declined", reason, userId },
+        metadata: { action: "trainer_declined", event: "trainer_declined", reason, userId },
       }),
     ]);
 
