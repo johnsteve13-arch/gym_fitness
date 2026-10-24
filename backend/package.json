@@ -12,6 +12,7 @@
     "prisma:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:clean": "tsx prisma/clean-dummies.ts",
+    "prisma:admin": "tsx prisma/create-admin.ts",
     "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
   "keywords": ["gym", "fitness", "saas", "tidb", "management"],
