@@ -13,6 +13,7 @@ import {
 } from "./mockData";
 import { User, Member, Membership, Trainer, MembershipPlan, GymClass, Reward, Attendance, WorkoutLog, BodyMeasurement, Payment, Notification, AccountStatus, DispatchedNotification, TrainerUnavailability } from "../types";
 import { generateSpecificAdvice } from "./ai-advice";
+import { supabase } from "./supabase";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -148,6 +149,33 @@ class ApiClient {
       this.setSession(data.token, data.user);
       return data;
     } catch {
+      // Direct Supabase authentication / lookup
+      try {
+        const { data: dbUser } = await supabase
+          .from("users")
+          .select("*, member:members(*), trainer:trainers(*)")
+          .eq("email", email.toLowerCase().trim())
+          .single();
+
+        if (dbUser) {
+          const user: User = {
+            id: dbUser.id,
+            email: dbUser.email,
+            role: dbUser.role,
+            firstName: dbUser.first_name,
+            lastName: dbUser.last_name,
+            phone: dbUser.phone,
+            status: dbUser.status,
+            avatarUrl: dbUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${dbUser.first_name}`,
+          };
+          const token = `sb-token-${dbUser.role}-${Date.now()}`;
+          this.setSession(token, user);
+          return { token, user };
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] login lookup:", sbErr);
+      }
+
       // Fallback matching mock accounts or registered members/trainers
       let user = Object.values(MOCK_USERS).find((u) => u.email.toLowerCase() === email.toLowerCase());
       if (!user) {
@@ -368,8 +396,26 @@ class ApiClient {
       });
       this.setSession(result.token, result.user);
     } catch {
+      const userId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `user-${Date.now()}`;
+      try {
+        await supabase.from("users").insert({
+          id: userId,
+          email: body.email.toLowerCase().trim(),
+          password_hash: body.password || "direct-hash",
+          role: role,
+          first_name: body.firstName.trim(),
+          last_name: body.lastName.trim(),
+          phone: body.phone?.trim() || null,
+          status: role === "trainer" ? "pending" : "active",
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}`,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (sbUserErr) {
+        console.warn("[Supabase] Direct user insert:", sbUserErr);
+      }
+
       const newUser: User = {
-        id: `user-${Date.now()}`,
+        id: userId,
         email: body.email,
         role: role as any,
         firstName: body.firstName,
@@ -385,11 +431,42 @@ class ApiClient {
     // Direct input of newly joined members into the Admin Roster & Profile directory
     if (role === "member") {
       const plan = MOCK_PLANS.find((p) => p.id === body.planId) || MOCK_PLANS[1];
+      const memberId = (result.user as any).member?.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `mem-${Date.now()}`);
+      const memberCode = (result.user as any).member?.memberCode || `MEM-${Math.floor(10000 + Math.random() * 90000)}`;
+      const qrCodeToken = (result.user as any).member?.qrCodeToken || `APEX-QR-${Date.now()}`;
+
+      // Write directly to Supabase members table
+      try {
+        await supabase.from("members").insert({
+          id: memberId,
+          user_id: result.user.id,
+          member_code: memberCode,
+          qr_code_token: qrCodeToken,
+          fitness_goals: body.fitnessGoals || "Athletic Conditioning and Hypertrophy",
+          reward_coins: 50,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (body.planId || plan?.id) {
+          await supabase.from("memberships").insert({
+            id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`,
+            member_id: memberId,
+            plan_id: body.planId || plan.id,
+            start_date: new Date().toISOString(),
+            end_date: new Date(Date.now() + (plan.durationDays || 30) * 86400000).toISOString(),
+            status: "active",
+            auto_renew: true,
+          });
+        }
+      } catch (sbMemErr) {
+        console.warn("[Supabase] Direct member insert:", sbMemErr);
+      }
+
       const memberRecord: Member = {
-        id: (result.user as any).member?.id || `mem-${Date.now()}`,
+        id: memberId,
         userId: result.user.id,
-        memberCode: (result.user as any).member?.memberCode || `MEM-${Math.floor(10000 + Math.random() * 90000)}`,
-        qrCodeToken: (result.user as any).member?.qrCodeToken || `APEX-QR-${Date.now()}`,
+        memberCode,
+        qrCodeToken,
         dateOfBirth: "1995-06-15",
         gender: "other",
         emergencyContactName: "Self-Registered Athlete",
@@ -409,7 +486,7 @@ class ApiClient {
         memberships: [
           {
             id: `sub-${Date.now()}`,
-            memberId: (result.user as any).member?.id || `mem-${Date.now()}`,
+            memberId: memberId,
             planId: plan.id,
             startDate: new Date().toISOString(),
             endDate: new Date(Date.now() + (plan.durationDays || 30) * 86400000).toISOString(),
@@ -425,8 +502,27 @@ class ApiClient {
       this.setMemberCoins(50, memberRecord.id);
       MOCK_MEMBERS.unshift(memberRecord);
     } else if (role === "trainer") {
+      const trainerId = (result.user as any).trainer?.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `trainer-${Date.now()}`);
+
+      // Write directly to Supabase trainers table
+      try {
+        await supabase.from("trainers").insert({
+          id: trainerId,
+          user_id: result.user.id,
+          specialization: body.specialization || "Strength & Conditioning",
+          bio: body.bio || "Certified personal coach dedicated to helping athletes achieve peak results.",
+          hourly_rate: parseFloat(body.hourlyRate) || 80,
+          rating: 5.0,
+          experience_years: parseInt(body.experienceYears, 10) || 3,
+          max_clients: 20,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (sbTrErr) {
+        console.warn("[Supabase] Direct trainer insert:", sbTrErr);
+      }
+
       const trainerRecord: Trainer = {
-        id: (result.user as any).trainer?.id || `trainer-${Date.now()}`,
+        id: trainerId,
         userId: result.user.id,
         specialization: body.specialization || "Strength & Conditioning",
         bio: body.bio || "Certified personal coach dedicated to helping athletes achieve peak results.",
@@ -461,6 +557,15 @@ class ApiClient {
       localStorage.setItem("apex_user", JSON.stringify(user));
       return user;
     } catch {
+      if (this.currentUser) {
+        try {
+          const { data: dbUser } = await supabase.from("users").select("status").eq("id", this.currentUser.id).single();
+          if (dbUser?.status) {
+            this.currentUser.status = dbUser.status;
+            localStorage.setItem("apex_gym_user", JSON.stringify(this.currentUser));
+          }
+        } catch {}
+      }
       if (this.currentUser?.role === "trainer") {
         const storedTrainers = this.getStoredTrainers();
         const found = storedTrainers.find(
@@ -494,10 +599,67 @@ class ApiClient {
       );
       members = [...storedNotPresent, ...apiMembers];
     } catch {
+      // Direct Supabase query
+      try {
+        const { data: dbMembers } = await supabase
+          .from("members")
+          .select("*, user:users(*), memberships(*, plan:membership_plans(*))")
+          .order("created_at", { ascending: false });
+
+        if (dbMembers && dbMembers.length > 0) {
+          members = dbMembers.map((m: any) => ({
+            id: m.id,
+            userId: m.user_id,
+            memberCode: m.member_code,
+            qrCodeToken: m.qr_code_token,
+            dateOfBirth: m.date_of_birth,
+            gender: m.gender,
+            emergencyContactName: m.emergency_contact_name,
+            emergencyContactPhone: m.emergency_contact_phone,
+            fitnessGoals: m.fitness_goals,
+            rewardCoins: m.reward_coins || 50,
+            user: m.user ? {
+              id: m.user.id,
+              email: m.user.email,
+              role: m.user.role,
+              firstName: m.user.first_name,
+              lastName: m.user.last_name,
+              phone: m.user.phone,
+              status: m.user.status,
+              createdAt: m.user.created_at,
+            } : undefined,
+            memberships: (m.memberships || []).map((sub: any) => ({
+              id: sub.id,
+              memberId: sub.member_id,
+              planId: sub.plan_id,
+              startDate: sub.start_date,
+              endDate: sub.end_date,
+              status: sub.status,
+              autoRenew: sub.auto_renew,
+              plan: sub.plan ? {
+                id: sub.plan.id,
+                name: sub.plan.name,
+                code: sub.plan.code,
+                price: parseFloat(sub.plan.price),
+                durationDays: sub.plan.duration_days,
+                planType: sub.plan.plan_type,
+                benefits: typeof sub.plan.benefits === "string" ? JSON.parse(sub.plan.benefits || "[]") : sub.plan.benefits,
+              } : undefined,
+            })),
+            createdAt: m.created_at,
+          }));
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] listMembers:", sbErr);
+      }
+
       const storedNotPresent = stored.filter(
-        (sm) => !MOCK_MEMBERS.some((mm) => mm.user?.email.toLowerCase() === sm.user?.email.toLowerCase())
+        (sm) => !members.some((am) => am.user?.email.toLowerCase() === sm.user?.email.toLowerCase())
       );
-      members = [...storedNotPresent, ...MOCK_MEMBERS];
+      members = [...storedNotPresent, ...members];
+      if (members.length === 0) {
+        members = [...MOCK_MEMBERS];
+      }
     }
 
     if (query.search) {
@@ -546,15 +708,59 @@ class ApiClient {
         body: JSON.stringify(body),
       });
     } catch {
+      const userId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `user-${Date.now()}`;
+      const memberId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `mem-${Date.now()}`;
+      const memberCode = `MEM-${Math.floor(10000 + Math.random() * 90000)}`;
+      const qrCodeToken = `APEX-MEM-${Date.now()}`;
+      const plan = MOCK_PLANS.find((p) => p.id === body.planId) || MOCK_PLANS[1];
+
+      try {
+        await supabase.from("users").insert({
+          id: userId,
+          email: body.email.toLowerCase().trim(),
+          password_hash: "direct-hash",
+          role: "member",
+          first_name: body.firstName.trim(),
+          last_name: body.lastName.trim(),
+          phone: body.phone?.trim() || null,
+          status: "active",
+          updated_at: new Date().toISOString(),
+        });
+
+        await supabase.from("members").insert({
+          id: memberId,
+          user_id: userId,
+          member_code: memberCode,
+          qr_code_token: qrCodeToken,
+          fitness_goals: body.fitnessGoals || "General Athletic Fitness",
+          reward_coins: 50,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (body.planId || plan?.id) {
+          await supabase.from("memberships").insert({
+            id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`,
+            member_id: memberId,
+            plan_id: body.planId || plan.id,
+            start_date: new Date().toISOString(),
+            end_date: new Date(Date.now() + 30 * 86400000).toISOString(),
+            status: "active",
+            auto_renew: true,
+          });
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] createMember:", sbErr);
+      }
+
       const newMember: Member = {
-        id: `mem-${Date.now()}`,
-        userId: `user-${Date.now()}`,
-        memberCode: `MEM-${Math.floor(10000 + Math.random() * 90000)}`,
-        qrCodeToken: `APEX-MEM-${Date.now()}`,
+        id: memberId,
+        userId: userId,
+        memberCode,
+        qrCodeToken,
         fitnessGoals: body.fitnessGoals || "General Athletic Fitness",
         rewardCoins: 50,
         user: {
-          id: `user-${Date.now()}`,
+          id: userId,
           email: body.email,
           role: "member",
           firstName: body.firstName,
@@ -565,13 +771,13 @@ class ApiClient {
         memberships: [
           {
             id: `sub-${Date.now()}`,
-            memberId: `mem-${Date.now()}`,
-            planId: body.planId || MOCK_PLANS[1].id,
+            memberId: memberId,
+            planId: body.planId || plan.id,
             startDate: new Date().toISOString(),
             endDate: new Date(Date.now() + 30 * 86400000).toISOString(),
             status: "active",
             autoRenew: true,
-            plan: MOCK_PLANS.find((p) => p.id === body.planId) || MOCK_PLANS[1],
+            plan,
           },
         ],
       };
@@ -611,18 +817,29 @@ class ApiClient {
 
   async deleteMember(id: string): Promise<any> {
     try {
-      return await this.request(`/members/${id}`, { method: "DELETE" });
-    } catch {
-      const idx = MOCK_MEMBERS.findIndex((m) => m.id === id);
-      if (idx !== -1) MOCK_MEMBERS.splice(idx, 1);
-      const stored = this.getStoredMembers();
-      const sIdx = stored.findIndex((m) => m.id === id);
-      if (sIdx !== -1) {
-        stored.splice(sIdx, 1);
-        localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+      await this.request(`/members/${id}`, { method: "DELETE" });
+    } catch {}
+
+    try {
+      const { data: member } = await supabase.from("members").select("user_id").eq("id", id).single();
+      if (member?.user_id) {
+        await supabase.from("users").delete().eq("id", member.user_id);
+      } else {
+        await supabase.from("members").delete().eq("id", id);
       }
-      return { success: true };
+    } catch (sbErr) {
+      console.warn("[Supabase] deleteMember:", sbErr);
     }
+
+    const idx = MOCK_MEMBERS.findIndex((m) => m.id === id);
+    if (idx !== -1) MOCK_MEMBERS.splice(idx, 1);
+    const stored = this.getStoredMembers();
+    const sIdx = stored.findIndex((m) => m.id === id);
+    if (sIdx !== -1) {
+      stored.splice(sIdx, 1);
+      localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+    }
+    return { success: true };
   }
 
   // MEMBERSHIP PLANS & ACTIONS
@@ -630,6 +847,31 @@ class ApiClient {
     try {
       return await this.request<MembershipPlan[]>("/memberships/plans");
     } catch {
+      try {
+        const { data: dbPlans } = await supabase
+          .from("membership_plans")
+          .select("*")
+          .order("price", { ascending: true });
+
+        if (dbPlans && dbPlans.length > 0) {
+          return dbPlans.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            code: p.code,
+            description: p.description,
+            durationDays: p.duration_days,
+            price: parseFloat(p.price),
+            planType: p.plan_type,
+            benefits: typeof p.benefits === "string" ? JSON.parse(p.benefits || "[]") : p.benefits,
+            maxClassesPerWeek: p.max_classes_per_week,
+            hasTrainerAccess: p.has_trainer_access,
+            isActive: p.is_active,
+            createdAt: p.created_at,
+          }));
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] listPlans:", sbErr);
+      }
       return MOCK_PLANS;
     }
   }
@@ -826,6 +1068,32 @@ class ApiClient {
       }
       return res;
     } catch {
+      // Direct Supabase attendance insert
+      try {
+        const { data: dbMembers } = await supabase
+          .from("members")
+          .select("id, user_id, member_code, qr_code_token, reward_coins, user:users(*)")
+          .or(`member_code.eq.${identifier},qr_code_token.eq.${identifier}`);
+
+        const found = dbMembers && dbMembers[0];
+        if (found) {
+          const attId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `att-${Date.now()}`;
+          await supabase.from("attendances").insert({
+            id: attId,
+            member_id: found.id,
+            check_in_time: new Date().toISOString(),
+            check_in_method: method,
+          });
+
+          await supabase.from("members").update({
+            reward_coins: (found.reward_coins || 0) + 8,
+            updated_at: new Date().toISOString(),
+          }).eq("id", found.id);
+        }
+      } catch (sbAttErr) {
+        console.warn("[Supabase] verifyAndCheckIn direct insert:", sbAttErr);
+      }
+
       // Offline / client fallback check-in logic
       const stored = this.getStoredMembers();
       const allMembers = [...stored, ...MOCK_MEMBERS];
@@ -970,7 +1238,48 @@ class ApiClient {
       const q = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
       const remote = await this.request<Attendance[]>(`/attendance/history${q}`);
       if (Array.isArray(remote)) return remote;
-    } catch {}
+    } catch {
+      try {
+        let query = supabase
+          .from("attendances")
+          .select("*, member:members(*, user:users(*))")
+          .order("check_in_time", { ascending: false });
+
+        if (memberId) {
+          query = query.eq("member_id", memberId);
+        }
+
+        const { data: dbAtts } = await query;
+        if (dbAtts && dbAtts.length > 0) {
+          return dbAtts.map((a: any) => ({
+            id: a.id,
+            memberId: a.member_id,
+            checkInTime: a.check_in_time,
+            checkOutTime: a.check_out_time,
+            checkInMethod: a.check_in_method,
+            notes: a.notes,
+            member: a.member ? {
+              id: a.member.id,
+              userId: a.member.user_id,
+              memberCode: a.member.member_code,
+              qrCodeToken: a.member.qr_code_token,
+              rewardCoins: a.member.reward_coins,
+              user: a.member.user ? {
+                id: a.member.user.id,
+                email: a.member.user.email,
+                role: a.member.user.role,
+                firstName: a.member.user.first_name,
+                lastName: a.member.user.last_name,
+                phone: a.member.user.phone,
+                status: a.member.user.status,
+              } : undefined,
+            } : undefined,
+          }));
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] getAttendanceHistory:", sbErr);
+      }
+    }
 
     const stored = this.getStoredAttendances();
     const map = new Map<string, Attendance>();
@@ -1132,10 +1441,53 @@ class ApiClient {
       );
       allTrainers = [...storedNotPresent, ...apiTrainers];
     } catch {
-      const storedNotPresent = stored.filter(
-        (st) => !MOCK_TRAINERS.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
-      );
-      allTrainers = [...storedNotPresent, ...MOCK_TRAINERS];
+      // Direct Supabase query
+      try {
+        const { data: dbTrainers } = await supabase
+          .from("trainers")
+          .select("*, user:users(*)")
+          .order("created_at", { ascending: false });
+
+        if (dbTrainers && dbTrainers.length > 0) {
+          const mappedTrainers: Trainer[] = dbTrainers.map((t: any) => ({
+            id: t.id,
+            userId: t.user_id,
+            specialization: t.specialization,
+            bio: t.bio,
+            experienceYears: t.experience_years,
+            hourlyRate: parseFloat(t.hourly_rate),
+            rating: parseFloat(t.rating) || 5.0,
+            maxClients: t.max_clients || 20,
+            user: t.user ? {
+              id: t.user.id,
+              email: t.user.email,
+              role: t.user.role,
+              firstName: t.user.first_name,
+              lastName: t.user.last_name,
+              phone: t.user.phone,
+              status: t.user.status,
+              createdAt: t.user.created_at,
+              avatarUrl: t.user.avatar_url,
+            } : undefined,
+            createdAt: t.created_at,
+          }));
+          const storedNotPresent = stored.filter(
+            (st) => !mappedTrainers.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
+          );
+          allTrainers = [...storedNotPresent, ...mappedTrainers];
+        } else {
+          const storedNotPresent = stored.filter(
+            (st) => !MOCK_TRAINERS.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
+          );
+          allTrainers = [...storedNotPresent, ...MOCK_TRAINERS];
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] listTrainers:", sbErr);
+        const storedNotPresent = stored.filter(
+          (st) => !MOCK_TRAINERS.some((mt) => mt.user?.email.toLowerCase() === st.user?.email.toLowerCase())
+        );
+        allTrainers = [...storedNotPresent, ...MOCK_TRAINERS];
+      }
     }
 
     const validTrainers = allTrainers.filter(isNotDeleted);
@@ -1158,8 +1510,40 @@ class ApiClient {
       this.saveStoredTrainer(trainer);
       return trainer;
     } catch {
-      const id = `tr-${Date.now()}`;
-      const userId = `usr-${Date.now()}`;
+      const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `tr-${Date.now()}`;
+      const userId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `usr-${Date.now()}`;
+
+      try {
+        await supabase.from("users").insert({
+          id: userId,
+          email: body.email.toLowerCase().trim(),
+          password_hash: "direct-hash",
+          role: "trainer",
+          first_name: body.firstName.trim(),
+          last_name: body.lastName.trim(),
+          phone: body.phone?.trim() || null,
+          status: "active",
+          avatar_url:
+            body.avatarUrl ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${body.firstName}_${body.lastName}`,
+          updated_at: new Date().toISOString(),
+        });
+
+        await supabase.from("trainers").insert({
+          id,
+          user_id: userId,
+          specialization: body.specialization || "Strength & Conditioning",
+          bio: body.bio || "Certified fitness specialist dedicated to helping you achieve your athletic potential.",
+          experience_years: Number(body.experienceYears) || 3,
+          hourly_rate: Number(body.hourlyRate) || 80.0,
+          rating: 5.0,
+          max_clients: Number(body.maxClients) || 20,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (sbErr) {
+        console.warn("[Supabase] createTrainer:", sbErr);
+      }
+
       const newTrainer: Trainer = {
         id,
         userId,
@@ -1225,6 +1609,15 @@ class ApiClient {
       apiResponse = await this.request(`/bookings/trainers/${id}/approve`, { method: "PATCH" });
     } catch {
       // Local fallback
+    }
+
+    // Direct Supabase update
+    try {
+      const { data: trainer } = await supabase.from("trainers").select("user_id").eq("id", id).single();
+      const targetUserId = trainer?.user_id || id;
+      await supabase.from("users").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", targetUserId);
+    } catch (sbErr) {
+      console.warn("[Supabase] approveTrainer:", sbErr);
     }
 
     // Update in locally stored trainers
@@ -1370,6 +1763,15 @@ class ApiClient {
       // Local fallback
     }
 
+    // Direct Supabase update
+    try {
+      const { data: trainer } = await supabase.from("trainers").select("user_id").eq("id", id).single();
+      const targetUserId = trainer?.user_id || id;
+      await supabase.from("users").update({ status: "suspended", updated_at: new Date().toISOString() }).eq("id", targetUserId);
+    } catch (sbErr) {
+      console.warn("[Supabase] declineTrainer:", sbErr);
+    }
+
     const stored = this.getStoredTrainers();
     const targetLower = id.toLowerCase();
     const updated = stored.map((t) => {
@@ -1512,6 +1914,18 @@ class ApiClient {
     } catch {
       // Offline or error fallback
     }
+
+    try {
+      const { data: trainer } = await supabase.from("trainers").select("user_id").eq("id", id).single();
+      if (trainer?.user_id) {
+        await supabase.from("users").delete().eq("id", trainer.user_id);
+      } else {
+        await supabase.from("trainers").delete().eq("id", id);
+      }
+    } catch (sbErr) {
+      console.warn("[Supabase] deleteTrainer:", sbErr);
+    }
+
     this.deleteStoredTrainer(id);
     return { success: true, message: "Trainer removed successfully." };
   }
@@ -1863,6 +2277,34 @@ class ApiClient {
       };
       this.saveStoredBooking(newBooking);
 
+      // Direct Supabase insert
+      try {
+        const dbBookingId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `bk-${Date.now()}`;
+        const { data: dbM } = await supabase.from("members").select("id").limit(1);
+        const { data: dbT } = await supabase.from("trainers").select("id").limit(1);
+        const targetMemId = body.memberId || dbM?.[0]?.id;
+        const targetTrId = body.trainerId || dbT?.[0]?.id;
+
+        if (targetMemId && targetTrId) {
+          await supabase.from("trainer_bookings").insert({
+            id: dbBookingId,
+            member_id: targetMemId,
+            trainer_id: targetTrId,
+            session_date: new Date(body.sessionDate || Date.now()).toISOString(),
+            start_time: body.startTime,
+            end_time: body.endTime || "11:00",
+            session_type: body.sessionType || "1-on-1 Fitness Coaching",
+            status: "confirmed",
+            payment_status: "paid",
+            price: calculatedPrice,
+            notes: body.notes || (isCoins ? `Redeemed ${coinsRequired} Coins` : `Duration: ${durationHours} hrs`),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (sbBookingErr) {
+        console.warn("[Supabase] direct bookTrainer insert:", sbBookingErr);
+      }
+
       if (isCoins) {
         MOCK_NOTIFICATIONS.unshift({
           id: `notif-${Date.now()}`,
@@ -1929,6 +2371,53 @@ class ApiClient {
       return all;
     } catch {
       let all = [...stored];
+      try {
+        const { data: dbBookings } = await supabase
+          .from("trainer_bookings")
+          .select("*, member:members(*, user:users(*)), trainer:trainers(*, user:users(*))")
+          .order("created_at", { ascending: false });
+
+        if (dbBookings && dbBookings.length > 0) {
+          const mappedDbBookings = dbBookings.map((b: any) => ({
+            id: b.id,
+            memberId: b.member_id,
+            trainerId: b.trainer_id,
+            sessionDate: b.session_date,
+            startTime: b.start_time,
+            endTime: b.end_time,
+            sessionType: b.session_type,
+            status: b.status,
+            paymentStatus: b.payment_status,
+            price: parseFloat(b.price),
+            notes: b.notes,
+            member: b.member ? {
+              id: b.member.id,
+              memberCode: b.member.member_code,
+              user: b.member.user ? {
+                firstName: b.member.user.first_name,
+                lastName: b.member.user.last_name,
+                email: b.member.user.email,
+                phone: b.member.user.phone,
+              } : undefined,
+            } : undefined,
+            trainer: b.trainer ? {
+              id: b.trainer.id,
+              user: b.trainer.user ? {
+                firstName: b.trainer.user.first_name,
+                lastName: b.trainer.user.last_name,
+                email: b.trainer.user.email,
+              } : undefined,
+            } : undefined,
+          }));
+
+          const storedNotPresent = stored.filter(
+            (sb) => !mappedDbBookings.some((ab) => ab.id === sb.id)
+          );
+          all = [...storedNotPresent, ...mappedDbBookings];
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] listBookings:", sbErr);
+      }
       if (params?.trainerId || params?.trainerUserId || params?.trainerEmail) {
         all = all.filter((b) => {
           if (params.trainerId && (b.trainerId === params.trainerId || b.trainer?.id === params.trainerId)) return true;

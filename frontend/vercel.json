@@ -2,6 +2,9 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "env": {
-    "NEXT_PUBLIC_API_URL": "https://gym-fitness-api.onrender.com/api"
+    "NEXT_PUBLIC_API_URL": "https://gym-fitness-api.onrender.com/api",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://mpqpdpqafehxlknthzxh.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wcXBkcHFhZmVoeGxrbnRoenhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTg1MTksImV4cCI6MjEwODE3NDUxOX0.rXJU3dO5aeU_bHaCmy3KKvmhpVkRT2z9WwS7smJDGKg",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_bmA69hWIkIKnRyeMByb1tg_EV-Lr4k8"
   }
 }
