@@ -15,11 +15,18 @@
     "prisma:admin": "tsx prisma/create-admin.ts",
     "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
-  "keywords": ["gym", "fitness", "saas", "tidb", "management"],
+  "keywords": [
+    "gym",
+    "fitness",
+    "saas",
+    "tidb",
+    "management"
+  ],
   "author": "John Steve",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.14.0",
+    "@supabase/supabase-js": "^2.118.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
