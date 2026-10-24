@@ -61,6 +61,27 @@ class ApiClient {
     }
   }
 
+  clearAllData() {
+    this.token = null;
+    this.currentUser = null;
+    if (typeof window !== "undefined") {
+      const keys = [
+        "apex_gym_token",
+        "apex_gym_user",
+        "apex_registered_members",
+        "apex_registered_trainers",
+        "apex_deleted_trainer_ids",
+        "apex_trainer_bookings",
+        "apex_attendances",
+        "apex_declined_conflicts",
+        "apex_dispatched_communications",
+        "apex_member_coins",
+        "apex_trainer_unavailabilities",
+      ];
+      keys.forEach((k) => localStorage.removeItem(k));
+    }
+  }
+
   getCurrentUser(): User | null {
     if (typeof window !== "undefined" && !this.currentUser) {
       const savedUser = localStorage.getItem("apex_gym_user");

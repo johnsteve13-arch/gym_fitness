@@ -3,48 +3,41 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Cleaning dummy members, trainers, and staff records from database...");
+  console.log("Purging all data from the database...");
 
-  // 1. Delete Attendances, BodyMeasurements, WorkoutLogs, Bookings, Payments, Memberships for non-admin users
-  const dummyUsers = await prisma.user.findMany({
-    where: {
-      email: {
-        not: "admin@apexfitness.com",
-      },
-    },
-    include: {
-      member: true,
-      trainer: true,
-    },
-  });
+  // 1. Delete dependent transactional records
+  await prisma.smsNotificationLog.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.userNotificationPreference.deleteMany({});
+  await prisma.rewardTransaction.deleteMany({});
+  await prisma.reward.deleteMany({});
+  await prisma.payment.deleteMany({});
+  await prisma.classBooking.deleteMany({});
+  await prisma.gymClass.deleteMany({});
+  await prisma.trainerBooking.deleteMany({});
+  await prisma.trainerUnavailability.deleteMany({});
+  await prisma.trainerAvailability.deleteMany({});
+  await prisma.bodyMeasurement.deleteMany({});
+  await prisma.workoutLogEntry.deleteMany({});
+  await prisma.workoutLog.deleteMany({});
+  await prisma.workoutExercise.deleteMany({});
+  await prisma.workoutProgram.deleteMany({});
+  await prisma.attendance.deleteMany({});
+  await prisma.membership.deleteMany({});
+  await prisma.membershipPlan.deleteMany({});
+  await prisma.aiActivityScore.deleteMany({});
+  await prisma.aiRecommendation.deleteMany({});
 
-  console.log(`Found ${dummyUsers.length} non-admin accounts to purge.`);
+  // 2. Delete Member and Trainer profile records
+  await prisma.member.deleteMany({});
+  await prisma.trainer.deleteMany({});
 
-  for (const u of dummyUsers) {
-    if (u.member) {
-      await prisma.attendance.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.workoutLog.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.bodyMeasurement.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.classBooking.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.trainerBooking.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.payment.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.membership.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.aiActivityScore.deleteMany({ where: { memberId: u.member.id } });
-      await prisma.member.delete({ where: { id: u.member.id } });
-    }
+  // 3. Delete non-admin or all user records
+  await prisma.user.deleteMany({});
+  await prisma.gymSetting.deleteMany({});
 
-    if (u.trainer) {
-      await prisma.trainerBooking.deleteMany({ where: { trainerId: u.trainer.id } });
-      await prisma.gymClass.deleteMany({ where: { trainerId: u.trainer.id } });
-      await prisma.trainer.delete({ where: { id: u.trainer.id } });
-    }
-
-    await prisma.notification.deleteMany({ where: { userId: u.id } });
-    await prisma.auditLog.deleteMany({ where: { userId: u.id } });
-    await prisma.user.delete({ where: { id: u.id } });
-  }
-
-  console.log("Purge complete! Only Admin account remains in the database.");
+  console.log("Purge complete! All tables have been completely cleared (0 records).");
 }
 
 main()
