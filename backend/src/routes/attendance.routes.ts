@@ -13,5 +13,6 @@ router.use(authenticate);
 
 router.get("/history", AttendanceController.history);
 router.get("/peak-hours", isStaffOrAdmin, AttendanceController.peakHours);
+router.delete("/:id", isStaffOrAdmin, AttendanceController.deleteAttendance);
 
 export default router;

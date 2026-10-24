@@ -80,4 +80,15 @@ export class AttendanceController {
       return sendError(res, err.message, 500);
     }
   }
+
+  static async deleteAttendance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      await AttendanceService.deleteAttendance(id);
+      await recordAuditLog(req, "ATTENDANCE_DELETED", "attendances", id);
+      return sendSuccess(res, null, "Attendance record deleted successfully.");
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
 }

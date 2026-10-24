@@ -21,6 +21,7 @@ import {
   Users,
   Timer,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 export default function AdminAttendancePage() {
@@ -86,6 +87,25 @@ export default function AdminAttendancePage() {
       loadData();
     } catch (e: any) {
       setFeedback({ success: false, message: e.message || "Failed to record check-out." });
+    }
+  };
+
+  const handleDeleteAttendance = async (attendanceId: string, athleteName: string) => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Are you sure you want to delete this attendance record for ${athleteName}?`)
+    ) {
+      return;
+    }
+    try {
+      await api.deleteAttendance(attendanceId);
+      setAttendances((prev) => prev.filter((a) => a.id !== attendanceId));
+      setFeedback({
+        success: true,
+        message: `Attendance entry for ${athleteName} deleted successfully.`,
+      });
+    } catch (e: any) {
+      setFeedback({ success: false, message: e.message || "Failed to delete attendance record." });
     }
   };
 
@@ -381,17 +401,34 @@ export default function AdminAttendancePage() {
                       </td>
 
                       <td className="px-4 py-3.5 text-right">
-                        {isOngoing ? (
+                        <div className="flex items-center justify-end gap-2">
+                          {isOngoing ? (
+                            <button
+                              type="button"
+                              onClick={() => handleManualCheckOut(att.memberId || att.member?.id || "")}
+                              className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-[11px] font-semibold transition"
+                              title="Record athlete departure time"
+                            >
+                              Time Out
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">Departed</span>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => handleManualCheckOut(att.memberId || att.member?.id || "")}
-                            className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-[11px] font-semibold transition"
+                            onClick={() =>
+                              handleDeleteAttendance(
+                                att.id,
+                                `${att.member?.user?.firstName || "Athlete"} ${att.member?.user?.lastName || ""}`.trim()
+                              )
+                            }
+                            className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition flex items-center justify-center"
+                            title="Delete attendance record"
                           >
-                            Time Out
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-500">Departed</span>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );

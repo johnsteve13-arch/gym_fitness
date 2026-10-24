@@ -317,4 +317,10 @@ export class AttendanceService {
       visits: count,
     }));
   }
+
+  static async deleteAttendance(id: string) {
+    return await prisma.attendance.delete({
+      where: { id },
+    });
+  }
 }

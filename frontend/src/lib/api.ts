@@ -1296,6 +1296,30 @@ class ApiClient {
     return list;
   }
 
+  async deleteAttendance(id: string): Promise<any> {
+    try {
+      await this.request(`/attendance/${id}`, { method: "DELETE" });
+    } catch {}
+
+    // Direct Supabase delete
+    try {
+      await supabase.from("attendances").delete().eq("id", id);
+    } catch (sbErr) {
+      console.warn("[Supabase] deleteAttendance:", sbErr);
+    }
+
+    const stored = this.getStoredAttendances();
+    const clean = stored.filter((a) => a.id !== id);
+    localStorage.setItem("apex_attendances", JSON.stringify(clean));
+
+    const mockIdx = MOCK_ATTENDANCES.findIndex((a) => a.id === id);
+    if (mockIdx !== -1) {
+      MOCK_ATTENDANCES.splice(mockIdx, 1);
+    }
+
+    return { success: true, message: "Attendance record deleted successfully." };
+  }
+
   async getPeakHours(): Promise<{ hour: string; visits: number }[]> {
     try {
       return await this.request<{ hour: string; visits: number }[]>("/attendance/peak-hours");
