@@ -26,8 +26,6 @@ import {
   Filter,
   Camera,
   Calendar,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 
 export default function AdminAttendancePage() {
@@ -45,11 +43,6 @@ export default function AdminAttendancePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
-
-  // Manual turnstile form state
-  const [manualId, setManualId] = useState("");
-  const [manualMode, setManualMode] = useState<"in" | "out">("in");
-  const [manualLoading, setManualLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   const loadData = async () => {
@@ -70,41 +63,6 @@ export default function AdminAttendancePage() {
   useEffect(() => {
     loadData();
   }, []);
-
-  const handleManualAction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualId.trim()) return;
-
-    setManualLoading(true);
-    setFeedback(null);
-    try {
-      if (manualMode === "in") {
-        const res = await api.verifyAndCheckIn(manualId, "manual_desk");
-        if (res.accessGranted) {
-          setFeedback({
-            success: true,
-            message: `Time In logged successfully for ${res.member?.name || manualId}! +8 Points awarded.`,
-          });
-          setManualId("");
-          loadData();
-        } else {
-          setFeedback({ success: false, message: res.reason || res.message || "Access Denied" });
-        }
-      } else {
-        const res = await api.checkOut(manualId);
-        setFeedback({
-          success: true,
-          message: res.message || `Time Out departure logged for ${manualId}.`,
-        });
-        setManualId("");
-        loadData();
-      }
-    } catch (err: any) {
-      setFeedback({ success: false, message: err.message || "Failed to process attendance." });
-    } finally {
-      setManualLoading(false);
-    }
-  };
 
   const handleManualCheckOut = async (memberId: string) => {
     try {
@@ -349,94 +307,20 @@ export default function AdminAttendancePage() {
         </div>
       )}
 
-      {/* Manual Action & Peak Hours Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Reception Desk Manual Entry Box */}
-        <div className="lg:col-span-5">
-          <Card className="glass-card border-slate-800 p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold text-white">Manual Reception Turnstile</h3>
-              <Badge variant={manualMode === "in" ? "emerald" : "warning"} className="text-[10px]">
-                {manualMode === "in" ? "Time In (+8 Pts)" : "Time Out"}
-              </Badge>
-            </div>
-            <p className="text-xs text-slate-400 mb-4">
-              {manualMode === "in"
-                ? "Enter member ID, code, or email to verify membership, open turnstile, and award 8 attendance points."
-                : "Enter member code or email to record departure time and calculate workout duration."}
-            </p>
-
-            {/* Mode Switcher */}
-            <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800 mb-3">
-              <button
-                type="button"
-                onClick={() => setManualMode("in")}
-                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  manualMode === "in"
-                    ? "bg-emerald-500 text-slate-950 shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Time In (+8)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setManualMode("out")}
-                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  manualMode === "out"
-                    ? "bg-amber-500 text-slate-950 shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Time Out</span>
-              </button>
-            </div>
-
-            <form onSubmit={handleManualAction} className="space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
-                  placeholder="e.g. MEM-10025 or athlete@apexfitness.com"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
-                  required
-                />
-              </div>
-
-              <Button
-                type="submit"
-                isLoading={manualLoading}
-                size="sm"
-                className={`w-full font-bold ${
-                  manualMode === "in"
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
-                    : "bg-amber-500 hover:bg-amber-400 text-slate-950"
-                }`}
-              >
-                {manualMode === "in" ? "Log Time In (+8 Points)" : "Log Time Out Departure"}
-              </Button>
-            </form>
-          </Card>
+      {/* Peak Hours Traffic Density Bar Chart */}
+      <Card className="glass-card border-slate-800 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span>Peak-Hour Traffic Density</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Visits by hour of day (06:00 to 21:00)</p>
+          </div>
+          <Badge variant="emerald">Live Gym Floor Density</Badge>
         </div>
-
-        {/* Peak Hours Analysis Bar Chart */}
-        <div className="lg:col-span-7">
-          <Card className="glass-card border-slate-800 p-5">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-sm font-bold text-white">Peak-Hour Traffic Density</h3>
-                <p className="text-xs text-slate-400">Visits by hour of day (06:00 to 21:00)</p>
-              </div>
-              <Badge variant="emerald">Live Gym Floor</Badge>
-            </div>
-            <BarChart data={peakHours} height={170} barColor="#10B981" />
-          </Card>
-        </div>
-      </div>
+        <BarChart data={peakHours} height={170} barColor="#10B981" />
+      </Card>
 
       {/* Filter Bar & Export Toolbar */}
       <Card className="glass-card border-slate-800 p-4">
