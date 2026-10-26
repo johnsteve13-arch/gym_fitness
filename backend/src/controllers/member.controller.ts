@@ -57,4 +57,17 @@ export class MemberController {
       return sendError(res, err.message, 400);
     }
   }
+
+  static async regenerateQrToken(req: Request, res: Response, next: NextFunction) {
+    try {
+      const member = await MemberService.regenerateQrToken(req.params.id);
+      await recordAuditLog(req, "QR_TOKEN_REGENERATED", "members", member.id, {
+        memberCode: member.memberCode,
+        newQrToken: member.qrCodeToken,
+      });
+      return sendSuccess(res, member, "Member QR token regenerated successfully.");
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
 }

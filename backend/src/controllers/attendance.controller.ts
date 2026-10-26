@@ -19,7 +19,12 @@ export class AttendanceController {
       });
 
       if (!result.accessGranted) {
-        return sendError(res, result.reason || "Access denied.", 403, result);
+        await recordAuditLog(req, "ATTENDANCE_CHECK_IN_DENIED", "attendances", undefined, {
+          identifier,
+          reason: result.reason,
+          code: result.code,
+        });
+        return sendSuccess(res, result, result.reason || "Access denied.", 200);
       }
 
       await recordAuditLog(req, "ATTENDANCE_CHECK_IN", "attendances", result.attendance?.id, {
@@ -75,6 +80,15 @@ export class AttendanceController {
   static async peakHours(req: Request, res: Response, next: NextFunction) {
     try {
       const data = await AttendanceService.getPeakHoursAnalysis();
+      return sendSuccess(res, data);
+    } catch (err: any) {
+      return sendError(res, err.message, 500);
+    }
+  }
+
+  static async stats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await AttendanceService.getAttendanceStats();
       return sendSuccess(res, data);
     } catch (err: any) {
       return sendError(res, err.message, 500);

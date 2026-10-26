@@ -60,6 +60,16 @@ body {
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
+@keyframes laser-sweep {
+  0% { top: 0%; opacity: 0.4; }
+  50% { top: 96%; opacity: 1; }
+  100% { top: 0%; opacity: 0.4; }
+}
+
+.animate-laser {
+  animation: laser-sweep 2.2s ease-in-out infinite;
+}
+
 .pulsing-indicator {
   animation: pulse-ring 2s infinite ease-in-out;
 }

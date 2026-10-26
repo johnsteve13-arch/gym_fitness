@@ -11,6 +11,7 @@ router.post("/check-out", AttendanceController.checkOut);
 
 router.use(authenticate);
 
+router.get("/stats", isStaffOrAdmin, AttendanceController.stats);
 router.get("/history", AttendanceController.history);
 router.get("/peak-hours", isStaffOrAdmin, AttendanceController.peakHours);
 router.delete("/:id", isStaffOrAdmin, AttendanceController.deleteAttendance);

@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   ExternalLink,
+  Camera,
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -43,6 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: "Members", href: "/admin/members", icon: Users },
     { label: "Memberships", href: "/admin/memberships", icon: CreditCard },
     { label: "Attendance", href: "/admin/attendance", icon: QrCode },
+    { label: "QR Scanner", href: "/admin/scanner", icon: Camera },
     { label: "Classes", href: "/admin/classes", icon: Calendar },
     { label: "Trainers", href: "/admin/trainers", icon: Dumbbell },
     { label: "Billing & Revenue", href: "/admin/billing", icon: Receipt },

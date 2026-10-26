@@ -11,6 +11,7 @@ router.get("/", isStaffOrAdmin, MemberController.list);
 router.get("/:id", MemberController.getById);
 router.post("/", isStaffOrAdmin, MemberController.create);
 router.patch("/:id", isStaffOrAdmin, MemberController.update);
+router.post("/:id/regenerate-qr", isStaffOrAdmin, MemberController.regenerateQrToken);
 router.delete("/:id", isStaffOrAdmin, MemberController.delete);
 
 export default router;

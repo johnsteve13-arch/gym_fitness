@@ -842,6 +842,84 @@ class ApiClient {
     return { success: true };
   }
 
+  async regenerateMemberQrCode(id: string): Promise<{ success: boolean; qrCodeToken: string; message: string }> {
+    try {
+      const res = await this.request<{ success: boolean; qrCodeToken: string; message: string }>(
+        `/members/${id}/regenerate-qr`,
+        { method: "POST" }
+      );
+      if (res?.qrCodeToken) {
+        const stored = this.getStoredMembers();
+        const sIdx = stored.findIndex((m) => m.id === id);
+        if (sIdx !== -1) {
+          stored[sIdx].qrCodeToken = res.qrCodeToken;
+          localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+        }
+        const mIdx = MOCK_MEMBERS.findIndex((m) => m.id === id);
+        if (mIdx !== -1) {
+          MOCK_MEMBERS[mIdx].qrCodeToken = res.qrCodeToken;
+        }
+        return res;
+      }
+    } catch {}
+
+    // Fallback: Supabase direct update
+    const randomHex = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const fallbackToken = `APEX-MEM-${timestamp}-${randomHex}`;
+
+    try {
+      const { data: updatedMember, error } = await supabase
+        .from("members")
+        .update({
+          qr_code_token: fallbackToken,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select("qr_code_token")
+        .single();
+
+      if (!error && updatedMember?.qr_code_token) {
+        const token = updatedMember.qr_code_token;
+        const stored = this.getStoredMembers();
+        const sIdx = stored.findIndex((m) => m.id === id);
+        if (sIdx !== -1) {
+          stored[sIdx].qrCodeToken = token;
+          localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+        }
+        const mIdx = MOCK_MEMBERS.findIndex((m) => m.id === id);
+        if (mIdx !== -1) {
+          MOCK_MEMBERS[mIdx].qrCodeToken = token;
+        }
+        return {
+          success: true,
+          qrCodeToken: token,
+          message: "New QR pass generated. Previous QR code invalidated.",
+        };
+      }
+    } catch (sbErr) {
+      console.warn("[Supabase] regenerateMemberQrCode:", sbErr);
+    }
+
+    // Local state fallback
+    const stored = this.getStoredMembers();
+    const sIdx = stored.findIndex((m) => m.id === id);
+    if (sIdx !== -1) {
+      stored[sIdx].qrCodeToken = fallbackToken;
+      localStorage.setItem("apex_registered_members", JSON.stringify(stored));
+    }
+    const mIdx = MOCK_MEMBERS.findIndex((m) => m.id === id);
+    if (mIdx !== -1) {
+      MOCK_MEMBERS[mIdx].qrCodeToken = fallbackToken;
+    }
+
+    return {
+      success: true,
+      qrCodeToken: fallbackToken,
+      message: "New QR pass generated. Previous QR code invalidated.",
+    };
+  }
+
   // MEMBERSHIP PLANS & ACTIONS
   async listPlans(): Promise<MembershipPlan[]> {
     try {
@@ -1068,16 +1146,102 @@ class ApiClient {
       }
       return res;
     } catch {
-      // Direct Supabase attendance insert
+      // Direct Supabase attendance verification and insert
       try {
         const { data: dbMembers } = await supabase
           .from("members")
-          .select("id, user_id, member_code, qr_code_token, reward_coins, user:users(*)")
+          .select("id, user_id, member_code, qr_code_token, reward_coins, user:users(*), memberships(*, plan:membership_plans(*))")
           .or(`member_code.eq.${identifier},qr_code_token.eq.${identifier}`);
 
         const found = dbMembers && dbMembers[0];
         if (found) {
+          const userObj: any = Array.isArray(found.user) ? found.user[0] : found.user;
+
+          // Check user status
+          if (userObj?.status === "suspended") {
+            return {
+              accessGranted: false,
+              code: "ACCOUNT_SUSPENDED",
+              reason: "Access Denied: Account is suspended by administration.",
+              member: { name: `${userObj?.first_name || ""} ${userObj?.last_name || ""}`.trim(), memberCode: found.member_code },
+            };
+          }
+
+          const memberships = (found as any).memberships || [];
+          memberships.sort((a: any, b: any) => new Date(b.end_date).getTime() - new Date(a.end_date).getTime());
+          const activePlan = memberships[0];
+          const now = new Date();
+
+          if (activePlan && new Date(activePlan.end_date) < now) {
+            return {
+              accessGranted: false,
+              code: "MEMBERSHIP_EXPIRED",
+              reason: `Access Denied: Membership expired on ${new Date(activePlan.end_date).toLocaleDateString()}. Please renew at front desk.`,
+              member: {
+                id: found.id,
+                name: `${userObj?.first_name || ""} ${userObj?.last_name || ""}`.trim(),
+                memberCode: found.member_code,
+                avatarUrl: userObj?.avatar_url,
+                planName: activePlan.plan?.name || "Membership",
+                daysRemaining: 0,
+                rewardCoins: found.reward_coins,
+              },
+            };
+          }
+
+          // Check cooldown (30 seconds)
+          const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+          const { data: recentAtt } = await supabase
+            .from("attendances")
+            .select("id, check_in_time")
+            .eq("member_id", found.id)
+            .gte("check_in_time", thirtySecondsAgo)
+            .order("check_in_time", { ascending: false })
+            .limit(1);
+
+          if (recentAtt && recentAtt.length > 0) {
+            return {
+              accessGranted: false,
+              code: "COOLDOWN_ACTIVE",
+              reason: "Scan Cooldown Active: Please wait 30 seconds before re-scanning.",
+              member: {
+                id: found.id,
+                name: `${userObj?.first_name || ""} ${userObj?.last_name || ""}`.trim(),
+                memberCode: found.member_code,
+                avatarUrl: userObj?.avatar_url,
+                rewardCoins: found.reward_coins,
+              },
+            };
+          }
+
+          // Check active session
+          const { data: activeSession } = await supabase
+            .from("attendances")
+            .select("id, check_in_time")
+            .eq("member_id", found.id)
+            .is("check_out_time", null)
+            .order("check_in_time", { ascending: false })
+            .limit(1);
+
+          if (activeSession && activeSession.length > 0) {
+            return {
+              accessGranted: false,
+              code: "ALREADY_CHECKED_IN",
+              canCheckOut: true,
+              activeAttendanceId: activeSession[0].id,
+              reason: "Already Checked In: Active session is ongoing on the gym floor.",
+              member: {
+                id: found.id,
+                name: `${userObj?.first_name || ""} ${userObj?.last_name || ""}`.trim(),
+                memberCode: found.member_code,
+                avatarUrl: userObj?.avatar_url,
+                rewardCoins: found.reward_coins,
+              },
+            };
+          }
+
           const attId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `att-${Date.now()}`;
+          const newCoins = (found.reward_coins || 0) + 8;
           await supabase.from("attendances").insert({
             id: attId,
             member_id: found.id,
@@ -1086,9 +1250,34 @@ class ApiClient {
           });
 
           await supabase.from("members").update({
-            reward_coins: (found.reward_coins || 0) + 8,
+            reward_coins: newCoins,
             updated_at: new Date().toISOString(),
           }).eq("id", found.id);
+
+          const newAtt: Attendance = {
+            id: attId,
+            memberId: found.id,
+            checkInTime: new Date().toISOString(),
+            checkOutTime: null,
+            checkInMethod: method,
+          };
+          this.saveStoredAttendance(newAtt);
+
+          return {
+            accessGranted: true,
+            code: "CHECK_IN_SUCCESS",
+            message: "Attendance Recorded Successfully!",
+            attendance: newAtt,
+            member: {
+              id: found.id,
+              name: `${userObj?.first_name || ""} ${userObj?.last_name || ""}`.trim(),
+              memberCode: found.member_code,
+              avatarUrl: userObj?.avatar_url,
+              planName: activePlan?.plan?.name || "Active Membership",
+              daysRemaining: 30,
+              rewardCoins: newCoins,
+            },
+          };
         }
       } catch (sbAttErr) {
         console.warn("[Supabase] verifyAndCheckIn direct insert:", sbAttErr);
@@ -1107,7 +1296,50 @@ class ApiClient {
       if (!member) {
         return {
           accessGranted: false,
-          message: "No registered athlete matches this code. Please sign up at /register first.",
+          code: "MEMBER_NOT_FOUND",
+          reason: "No registered athlete matches this code. Please verify or register.",
+          message: "No registered athlete matches this code. Please verify or register.",
+        };
+      }
+
+      // Cooldown check in offline mode
+      const storedAtts = this.getStoredAttendances();
+      const allAtts = [...storedAtts, ...MOCK_ATTENDANCES];
+      const thirtySecAgo = Date.now() - 30 * 1000;
+      const recent = allAtts.find(
+        (a) => (a.memberId === member.id || a.member?.id === member.id) && new Date(a.checkInTime).getTime() >= thirtySecAgo
+      );
+      if (recent) {
+        return {
+          accessGranted: false,
+          code: "COOLDOWN_ACTIVE",
+          reason: "Scan Cooldown Active: Please wait 30 seconds before re-scanning.",
+          member: {
+            id: member.id,
+            name: `${member.user?.firstName} ${member.user?.lastName}`,
+            memberCode: member.memberCode,
+            avatarUrl: member.user?.avatarUrl,
+            rewardCoins: member.rewardCoins,
+          },
+        };
+      }
+
+      // Active session check in offline mode
+      const active = allAtts.find((a) => (a.memberId === member.id || a.member?.id === member.id) && !a.checkOutTime);
+      if (active) {
+        return {
+          accessGranted: false,
+          code: "ALREADY_CHECKED_IN",
+          canCheckOut: true,
+          activeAttendanceId: active.id,
+          reason: "Already Checked In: Active session is ongoing on the gym floor.",
+          member: {
+            id: member.id,
+            name: `${member.user?.firstName} ${member.user?.lastName}`,
+            memberCode: member.memberCode,
+            avatarUrl: member.user?.avatarUrl,
+            rewardCoins: member.rewardCoins,
+          },
         };
       }
 
@@ -1122,7 +1354,6 @@ class ApiClient {
       MOCK_ATTENDANCES.unshift(newAtt);
       this.saveStoredAttendance(newAtt);
 
-      // Award 8 points for every member attendance
       const updatedCoins = (member.rewardCoins || 0) + 8;
       member.rewardCoins = updatedCoins;
       this.setMemberCoins(updatedCoins, member.id);
@@ -1130,20 +1361,10 @@ class ApiClient {
         localStorage.setItem("apex_registered_members", JSON.stringify(stored));
       }
 
-      // Add notification for attendance bonus points (+8 Points)
-      MOCK_NOTIFICATIONS.unshift({
-        id: `notif-att-${Date.now()}`,
-        userId: member.userId,
-        title: "Attendance Bonus (+8 Points)",
-        message: `Welcome to the gym, ${member.user?.firstName}! You earned 8 reward points for checking in today. Updated balance: ${updatedCoins} points.`,
-        type: "reward",
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      });
-
       return {
         accessGranted: true,
-        message: `Welcome, ${member.user?.firstName}! Access verified. Time In recorded. +8 Points Earned.`,
+        code: "CHECK_IN_SUCCESS",
+        message: "Attendance Recorded Successfully!",
         attendance: newAtt,
         member: {
           id: member.id,
@@ -1318,6 +1539,59 @@ class ApiClient {
     }
 
     return { success: true, message: "Attendance record deleted successfully." };
+  }
+
+  async getAttendanceStats(): Promise<{
+    todayCheckIns: number;
+    todayUniqueMembers: number;
+    currentlyInGym: number;
+    totalVisits: number;
+  }> {
+    try {
+      const remote = await this.request<any>("/attendance/stats");
+      if (remote && remote.todayCheckIns !== undefined) {
+        return remote;
+      }
+    } catch {}
+
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const { data: dbAtts } = await supabase
+        .from("attendances")
+        .select("id, member_id, check_in_time, check_out_time");
+
+      if (dbAtts) {
+        const todayAtts = dbAtts.filter((a: any) => new Date(a.check_in_time) >= startOfDay);
+        const uniqueMembers = new Set(todayAtts.map((a: any) => a.member_id));
+        const activeNow = dbAtts.filter((a: any) => !a.check_out_time);
+
+        return {
+          todayCheckIns: todayAtts.length,
+          todayUniqueMembers: uniqueMembers.size,
+          currentlyInGym: activeNow.length,
+          totalVisits: dbAtts.length,
+        };
+      }
+    } catch (sbErr) {
+      console.warn("[Supabase] getAttendanceStats:", sbErr);
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const stored = this.getStoredAttendances();
+    const all = [...stored, ...MOCK_ATTENDANCES];
+    const todayAtts = all.filter((a) => new Date(a.checkInTime) >= startOfDay);
+    const unique = new Set(todayAtts.map((a) => a.memberId));
+    const active = all.filter((a) => !a.checkOutTime);
+
+    return {
+      todayCheckIns: todayAtts.length,
+      todayUniqueMembers: unique.size,
+      currentlyInGym: active.length,
+      totalVisits: all.length,
+    };
   }
 
   async getPeakHours(): Promise<{ hour: string; visits: number }[]> {

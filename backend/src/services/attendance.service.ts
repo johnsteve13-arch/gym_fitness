@@ -4,7 +4,7 @@ import { parseMemberQrToken } from "../utils/qr";
 export class AttendanceService {
   static async verifyAndCheckIn(params: {
     identifier: string; // QR code token, memberCode, or email
-    method?: "qr" | "manual_id" | "kiosk";
+    method?: "qr" | "manual_id" | "kiosk" | "camera_scanner" | "manual_desk" | string;
     staffId?: string;
     notes?: string;
   }) {
@@ -99,9 +99,14 @@ export class AttendanceService {
         return {
           accessGranted: false,
           member: {
+            id: member.id,
             name: `${member.user.firstName} ${member.user.lastName}`,
             memberCode: member.memberCode,
+            avatarUrl: member.user.avatarUrl,
+            planName: activeMembership.plan.name,
             expiredDate: activeMembership.endDate,
+            daysRemaining: 0,
+            rewardCoins: member.rewardCoins,
           },
           reason: `Access Denied: Membership expired on ${new Date(activeMembership.endDate).toLocaleDateString()}. Please renew at front desk.`,
           code: "MEMBERSHIP_EXPIRED",
@@ -109,23 +114,58 @@ export class AttendanceService {
       }
     }
 
-    // Check for recent duplicate check-in (within the last 30 minutes)
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    const existingRecentCheckIn = await prisma.attendance.findFirst({
+    // 1. Strict Cooldown check (prevent accidental double scan within 30 seconds)
+    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+    const recentDuplicateScan = await prisma.attendance.findFirst({
       where: {
         memberId: member.id,
-        checkInTime: { gte: thirtyMinutesAgo },
-        checkOutTime: null,
+        checkInTime: { gte: thirtySecondsAgo },
       },
+      orderBy: { checkInTime: "desc" },
     });
 
-    if (existingRecentCheckIn) {
+    if (recentDuplicateScan) {
       return {
         accessGranted: false,
-        member: { name: `${member.user.firstName} ${member.user.lastName}`, memberCode: member.memberCode },
-        reason: "Duplicate Check-in: Member has already checked in within the last 30 minutes.",
-        code: "DUPLICATE_CHECK_IN",
-        lastCheckInTime: existingRecentCheckIn.checkInTime,
+        member: {
+          id: member.id,
+          name: `${member.user.firstName} ${member.user.lastName}`,
+          memberCode: member.memberCode,
+          avatarUrl: member.user.avatarUrl,
+          planName: activeMembership.plan.name,
+          rewardCoins: member.rewardCoins,
+        },
+        reason: "Scan Cooldown Active: Please wait 30 seconds before re-scanning.",
+        code: "COOLDOWN_ACTIVE",
+        lastCheckInTime: recentDuplicateScan.checkInTime,
+      };
+    }
+
+    // 2. Active Session check (already checked in on gym floor without checkout)
+    const activeSession = await prisma.attendance.findFirst({
+      where: {
+        memberId: member.id,
+        checkOutTime: null,
+      },
+      orderBy: { checkInTime: "desc" },
+    });
+
+    if (activeSession) {
+      return {
+        accessGranted: false,
+        member: {
+          id: member.id,
+          name: `${member.user.firstName} ${member.user.lastName}`,
+          memberCode: member.memberCode,
+          avatarUrl: member.user.avatarUrl,
+          planName: activeMembership.plan.name,
+          rewardCoins: member.rewardCoins,
+        },
+        reason: "Already Checked In: Active session is ongoing on the gym floor.",
+        code: "ALREADY_CHECKED_IN",
+        canCheckOut: true,
+        activeAttendanceId: activeSession.id,
+        lastCheckInTime: activeSession.checkInTime,
       };
     }
 
@@ -173,7 +213,8 @@ export class AttendanceService {
 
     return {
       accessGranted: true,
-      message: `Welcome, ${member.user.firstName}! Entry verified. +8 Points Earned.`,
+      message: "Attendance Recorded Successfully!",
+      code: "CHECK_IN_SUCCESS",
       attendance,
       member: {
         id: member.id,
@@ -181,6 +222,8 @@ export class AttendanceService {
         memberCode: member.memberCode,
         avatarUrl: member.user.avatarUrl,
         planName: activeMembership.plan.name,
+        membershipStatus: activeMembership.status,
+        membershipExpirationDate: activeMembership.endDate,
         daysRemaining,
         rewardCoins: member.rewardCoins + 8,
       },
@@ -316,6 +359,35 @@ export class AttendanceService {
       hour: `${parseInt(hour, 10).toString().padStart(2, "0")}:00`,
       visits: count,
     }));
+  }
+
+  static async getAttendanceStats() {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const todayTotal = await prisma.attendance.count({
+      where: { checkInTime: { gte: startOfToday } },
+    });
+
+    const todayActive = await prisma.attendance.count({
+      where: { checkOutTime: null },
+    });
+
+    const todayUniqueRecords = await prisma.attendance.groupBy({
+      by: ["memberId"],
+      where: { checkInTime: { gte: startOfToday } },
+    });
+
+    const allTimeTotal = await prisma.attendance.count();
+
+    return {
+      todayCheckIns: todayTotal,
+      todayUniqueMembers: todayUniqueRecords.length,
+      currentlyActiveOnFloor: todayActive,
+      currentlyInGym: todayActive,
+      allTimeCheckIns: allTimeTotal,
+      totalVisits: allTimeTotal,
+    };
   }
 
   static async deleteAttendance(id: string) {

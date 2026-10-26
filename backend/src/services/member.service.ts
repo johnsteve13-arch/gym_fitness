@@ -274,4 +274,35 @@ export class MemberService {
     await prisma.user.delete({ where: { id: member.userId } });
     return { success: true, message: "Member and user record permanently deleted." };
   }
+
+  static async regenerateQrToken(id: string) {
+    const member = await prisma.member.findUnique({ where: { id }, include: { user: true } });
+    if (!member) throw new Error("Member not found.");
+
+    const newQrToken = generateMemberQrToken(member.memberCode);
+    const updated = await prisma.member.update({
+      where: { id },
+      data: { qrCodeToken: newQrToken },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            avatarUrl: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+        memberships: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          include: { plan: true },
+        },
+      },
+    });
+    return updated;
+  }
 }

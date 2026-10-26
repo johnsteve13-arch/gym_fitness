@@ -362,9 +362,12 @@ export default function MemberOverviewPage() {
             </div>
 
             <div className="mt-5 pt-3 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-400">
-              <span>Status: <strong className="text-emerald-400">Active Entry</strong></span>
-              <Link href="/member/package" className="text-emerald-400 font-bold hover:underline">
-                Manage Package →
+              <Link href="/member/attendance" className="text-emerald-400 font-bold hover:underline flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Attendance Logs & Pass →</span>
+              </Link>
+              <Link href="/member/package" className="text-slate-400 hover:text-white">
+                Package →
               </Link>
             </div>
           </div>

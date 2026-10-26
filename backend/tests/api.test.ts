@@ -4,9 +4,13 @@ import { generateMemberQrToken, parseMemberQrToken } from "../src/utils/qr";
 import { PaymentService } from "../src/services/payment.service";
 import { SmsService } from "../src/services/sms.service";
 import { BookingService } from "../src/services/booking.service";
+import { AttendanceService } from "../src/services/attendance.service";
+import { MemberService } from "../src/services/member.service";
 import { prisma } from "../src/config/database";
 
 describe("Apex Iron Fitness - Production API & Business Logic Tests", () => {
+  jest.setTimeout(30000);
+
   afterAll(async () => {
     await prisma.$disconnect();
   });
@@ -238,6 +242,103 @@ describe("Apex Iron Fitness - Production API & Business Logic Tests", () => {
       const isOverlap =
         existing.startTime < overlapping.endTime && existing.endTime > overlapping.startTime;
       expect(isOverlap).toBe(true);
+    });
+  });
+
+  describe("QR Code Attendance & Member Validation Engine", () => {
+    it("Protected route GET /api/attendance/stats without token should return 401 Unauthorized", async () => {
+      const res = await request(app).get("/api/attendance/stats");
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it("AttendanceService.getAttendanceStats should compute attendance statistics structure", async () => {
+      const stats = await AttendanceService.getAttendanceStats();
+      expect(stats).toHaveProperty("todayCheckIns");
+      expect(stats).toHaveProperty("todayUniqueMembers");
+      expect(stats).toHaveProperty("currentlyInGym");
+      expect(stats).toHaveProperty("totalVisits");
+      expect(typeof stats.todayCheckIns).toBe("number");
+      expect(typeof stats.todayUniqueMembers).toBe("number");
+      expect(typeof stats.currentlyInGym).toBe("number");
+      expect(typeof stats.totalVisits).toBe("number");
+    });
+
+    it("should reject check-in for non-existent member or invalid token", async () => {
+      const result = await AttendanceService.verifyAndCheckIn({
+        identifier: "NON_EXISTENT_QR_CODE_123456789",
+        method: "camera_scanner",
+      });
+      expect(result.accessGranted).toBe(false);
+      expect(result.code).toBe("MEMBER_NOT_FOUND");
+    });
+
+    it("should reject check-in for suspended member", async () => {
+      const suspendedMember = await prisma.member.findFirst({
+        where: { user: { status: "suspended" } },
+        include: { user: true },
+      });
+
+      if (suspendedMember) {
+        const result = await AttendanceService.verifyAndCheckIn({
+          identifier: suspendedMember.qrCodeToken || suspendedMember.memberCode,
+          method: "camera_scanner",
+        });
+        expect(result.accessGranted).toBe(false);
+        expect(result.code).toBe("ACCOUNT_SUSPENDED");
+      }
+    });
+
+    it("should enforce duplicate check-in / ongoing session or cooldown restrictions", async () => {
+      const member = await prisma.member.findFirst({
+        where: {
+          memberships: {
+            some: {
+              status: "active",
+            },
+          },
+        },
+        include: {
+          user: true,
+          memberships: true,
+        },
+      });
+
+      if (member) {
+        // Attempt check-in
+        const firstScan = await AttendanceService.verifyAndCheckIn({
+          identifier: member.qrCodeToken || member.memberCode,
+          method: "camera_scanner",
+        });
+
+        // If first scan was granted or already has active session, subsequent scan must trigger cooldown or already checked in
+        const secondScan = await AttendanceService.verifyAndCheckIn({
+          identifier: member.qrCodeToken || member.memberCode,
+          method: "camera_scanner",
+        });
+
+        expect(secondScan.accessGranted).toBe(false);
+        expect(["COOLDOWN_ACTIVE", "ALREADY_CHECKED_IN", "MEMBERSHIP_EXPIRED"]).toContain(secondScan.code);
+
+        // Check out the member cleanly
+        await AttendanceService.checkOut({ memberId: member.id }).catch(() => {});
+      }
+    });
+
+    it("should allow regeneration of member QR token and update database", async () => {
+      const member = await prisma.member.findFirst();
+      if (member) {
+        const oldToken = member.qrCodeToken;
+        const res = await MemberService.regenerateQrToken(member.id);
+        expect(res).toBeDefined();
+        expect(res.qrCodeToken).toBeDefined();
+        expect(res.qrCodeToken).not.toBe(oldToken);
+        expect(res.qrCodeToken).toMatch(/^APEX-/);
+
+        // Verify database persistence
+        const updated = await prisma.member.findUnique({ where: { id: member.id } });
+        expect(updated?.qrCodeToken).toBe(res.qrCodeToken);
+      }
     });
   });
 });

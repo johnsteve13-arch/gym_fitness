@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import { api } from "@/lib/api";
 import { Member, MembershipPlan } from "@/types";
 import { Card } from "@/components/ui/Card";
@@ -19,6 +20,9 @@ import {
   CheckCircle,
   Clock,
   Award,
+  QrCode,
+  RefreshCw,
+  Printer,
 } from "lucide-react";
 
 export default function AdminMembersPage() {
@@ -31,6 +35,8 @@ export default function AdminMembersPage() {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [qrModalMember, setQrModalMember] = useState<Member | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   // Add Member form state
   const [formData, setFormData] = useState({
@@ -87,6 +93,44 @@ export default function AdminMembersPage() {
     );
     setActionSuccess(`Status updated to ${newStatus}.`);
     setTimeout(() => setActionSuccess(""), 3000);
+  };
+
+  const handleDownloadQr = (member: Member) => {
+    const canvas = document.getElementById(`qr-canvas-${member.id}`) as HTMLCanvasElement;
+    if (!canvas) return;
+    const url = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `apex-qr-pass-${member.memberCode}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleRegenerateQr = async (member: Member) => {
+    if (
+      !confirm(
+        `Are you sure you want to regenerate the QR access token for ${member.user?.firstName} ${member.user?.lastName}? The previous QR pass will be immediately revoked.`
+      )
+    ) {
+      return;
+    }
+    setRegenerating(true);
+    try {
+      const res = await api.regenerateMemberQrCode(member.id);
+      if (res?.qrCodeToken) {
+        setMembers((prev) =>
+          prev.map((m) => (m.id === member.id ? { ...m, qrCodeToken: res.qrCodeToken } : m))
+        );
+        setQrModalMember((prev) => (prev && prev.id === member.id ? { ...prev, qrCodeToken: res.qrCodeToken } : prev));
+        setActionSuccess("QR access code regenerated successfully. Old pass revoked.");
+        setTimeout(() => setActionSuccess(""), 4000);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to regenerate QR code.");
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const handleDeleteMember = async (id: string, name: string) => {
@@ -277,6 +321,13 @@ export default function AdminMembersPage() {
 
                       <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
                         <button
+                          onClick={() => setQrModalMember(member)}
+                          className="p-1.5 rounded-lg bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/20 transition"
+                          title="View & Download QR Access Pass"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setSelectedMember(member)}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
                           title="View Profile"
@@ -448,6 +499,87 @@ export default function AdminMembersPage() {
             <div className="pt-2 flex justify-end">
               <Button size="sm" variant="secondary" onClick={() => setSelectedMember(null)}>
                 Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* QR CODE ACCESS PASS MODAL */}
+      {qrModalMember && (
+        <Modal
+          isOpen={!!qrModalMember}
+          onClose={() => setQrModalMember(null)}
+          title={`Digital Access Pass: ${qrModalMember.user?.firstName} ${qrModalMember.user?.lastName}`}
+        >
+          <div className="space-y-4 text-xs">
+            {/* Visual Pass Card */}
+            <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 rounded-2xl p-5 border border-emerald-500/30 text-center relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-400 to-emerald-500" />
+
+              <div className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mb-1">
+                Apex Iron Fitness Club
+              </div>
+              <h3 className="text-base font-black text-white">
+                {qrModalMember.user?.firstName} {qrModalMember.user?.lastName}
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                {qrModalMember.memberCode}
+              </p>
+
+              {/* QR Code Canvas */}
+              <div className="my-5 p-3.5 bg-white rounded-2xl inline-block shadow-lg mx-auto border-4 border-slate-900">
+                <QRCodeCanvas
+                  id={`qr-canvas-${qrModalMember.id}`}
+                  value={qrModalMember.qrCodeToken || qrModalMember.memberCode}
+                  size={190}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              {/* Security Token details */}
+              <div className="bg-slate-900/80 rounded-xl p-2.5 border border-slate-800 text-left space-y-1">
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>Pass Token:</span>
+                  <span className="font-mono text-emerald-400 truncate max-w-[200px]">
+                    {qrModalMember.qrCodeToken || qrModalMember.memberCode}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>Membership Plan:</span>
+                  <span className="font-semibold text-white">
+                    {qrModalMember.memberships?.[0]?.plan?.name || "Standard Active"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>Status:</span>
+                  <Badge variant={qrModalMember.user?.status === "suspended" ? "danger" : "emerald"} className="text-[9px]">
+                    {qrModalMember.user?.status || "active"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button
+                type="button"
+                onClick={() => handleDownloadQr(qrModalMember)}
+                className="flex-1 bg-emerald-500 text-slate-950 font-bold"
+                leftIcon={<Download className="w-4 h-4" />}
+              >
+                Download Pass (PNG)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                isLoading={regenerating}
+                onClick={() => handleRegenerateQr(qrModalMember)}
+                className="flex-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                leftIcon={<RefreshCw className="w-4 h-4" />}
+              >
+                Regenerate Pass
               </Button>
             </div>
           </div>
